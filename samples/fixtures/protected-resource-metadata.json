@@ -1,0 +1,14 @@
+{
+  "resource": "http://127.0.0.1:8930/mcp",
+  "authorization_servers": [
+    "http://127.0.0.1:9100"
+  ],
+  "scopes_supported": [
+    "campuspulse.read",
+    "campuspulse.incident.write"
+  ],
+  "bearer_methods_supported": [
+    "header"
+  ],
+  "resource_documentation": "https://campuspulse.example/docs/mcp"
+}

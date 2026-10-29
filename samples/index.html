@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Week 08 demo commands - CSC 436</title>
+<link rel="stylesheet" href="../../../assets/course.css">
+<link rel="icon" type="image/svg+xml" href="../../../assets/course-icon.svg">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header><a class="course-name" href="../../../index.html">CSC 436</a>
+<nav aria-label="Course">
+<a href="../../../docs/getting-started.html">Start here</a>
+<a href="../../../docs/new_syllabus.html">Syllabus</a>
+<a href="../../../docs/course-map.html">Course map</a>
+<a href="../../../final-project/index.html">Final project</a>
+</nav></header>
+<main id="main">
+<p class="source-link"><a href="README.md" download>Download Markdown source</a></p>
+<h1 id="week-08-demo-commands">Week 08 demo commands</h1>
+<p>Use <strong>Node.js 24 LTS</strong> (Long-Term Support) and npm. Check <code>node --version</code>.
+In the master checkout, run <code>cd instructor</code> in <strong>each new terminal</strong> first.
+In the student download, start in its top directory containing <code>weeks</code> and
+<code>samples</code>. That is the <strong>course-content root</strong> used below and by slide captions
+that say &quot;repository root&quot;. Do not run the Windows and macOS alternatives both.</p>
+<h2 id="1-complete-browser-sign-in-blocks-a-b-and-c">1. Complete browser sign-in (Blocks A, B and C)</h2>
+<p>PowerShell, from the course-content root:</p>
+<pre><code class="language-powershell">npm --prefix samples\mcp-starter ci
+npm --prefix samples\oidc-web-app ci
+npm --prefix samples\oidc-web-app run demo
+</code></pre>
+<p>macOS/Linux, from the same course-content root:</p>
+<pre><code class="language-bash">npm --prefix samples/mcp-starter ci
+npm --prefix samples/oidc-web-app ci
+npm --prefix samples/oidc-web-app run demo
+</code></pre>
+<p>Install before class. The last command builds the shared backend and starts
+<strong>all three servers</strong>: the browser application&#39;s Backend-for-Frontend (BFF),
+a maintained local identity provider, and the authenticated resource server.
+The BFF is the OAuth client; the browser is its interface (user agent).
+Open the printed <strong>Course browser application</strong> URL. Ports are allocated for
+this run, not fixed at 5173 or 9100.</p>
+<ol>
+<li>Click <strong>Sign in with course identity</strong>, then use the temporary viewer
+username/password printed by the launcher. Expect actual service data and
+incident <code>INC-2026-0016</code>, with no operator form.</li>
+<li>Sign out and complete the provider&#39;s sign-out prompt. Sign in as the
+temporary operator, enter an update, choose <strong>Review update</strong>, and then
+<strong>Confirm and publish</strong>. The timeline must change, not just return HTTP 200.</li>
+<li>Reload: the session persists. Sign out: protected requests are refused.
+Browser JavaScript receives no access/refresh tokens; the session identifier
+is an opaque, HttpOnly cookie.</li>
+<li>Ctrl+C in the launcher closes only this demo&#39;s three listeners. Data,
+sessions, accounts and keys are in memory. Do not record the password banner.</li>
+</ol>
+<p>This is genuine local password sign-in and an authorization-code exchange,
+not the <code>/mint</code> shortcut below. It does not prove an external tenant was
+configured. Its scopes (<code>status:read</code>, <code>incidents:read</code>, <code>incidents:write</code>)
+are intentionally different from the teaching proxy&#39;s <code>campuspulse.*</code> scopes.
+Do not mix the two configurations. See the
+<a href="../../../samples/oidc-web-app/index.html">browser application guide</a> and
+<a href="../provider-integration.html">provider handoff</a>.</p>
+<h2 id="2-small-protocol-experiments-blocks-a-and-b">2. Small protocol experiments (Blocks A and B)</h2>
+<p>These scripts need <strong>only the lab issuer</strong>. No npm installation is needed for
+these particular files. The browser demo and real Week 7 backend do need theirs.</p>
+<p>Start a fresh <strong>Terminal A</strong>, from the course-content root:</p>
+<pre><code class="language-powershell">cd weeks\week08\samples
+$env:PORT=&#39;9100&#39;
+node authz-server.mjs
+</code></pre>
+<p>macOS:</p>
+<pre><code class="language-bash">cd weeks/week08/samples
+PORT=9100 node authz-server.mjs
+</code></pre>
+<p>Expect issuer <code>http://127.0.0.1:9100</code>, discovery and JWKS (JSON Web Key Set)
+addresses, and an active key ID. Keep A running. Do not stop an unidentified
+process if the port is occupied. Use fresh shells without overrides from other
+labs (<code>AS_ISSUER</code>, <code>AS</code>, <code>JWKS_URI</code>, <code>MCP_RESOURCE</code>, <code>CLOCK_SKEW</code>).</p>
+<p>In a fresh <strong>Terminal D</strong>, enter the sample directory:</p>
+<pre><code class="language-powershell">cd weeks\week08\samples
+node pkce.mjs
+node pkce-negative.mjs
+node validate-token.mjs --variant valid --decode-only
+node validate-token.mjs --variant valid --scope campuspulse.read
+node tamper.mjs
+node validate-token.mjs --token-file out\forged.txt --scope campuspulse.incident.write
+</code></pre>
+<p>macOS uses <code>cd weeks/week08/samples</code> and <code>out/forged.txt</code>; the other commands
+are identical. These are the <strong>client applications</strong> for the small experiments.
+<code>pkce.mjs</code> only prints a request and verifier: do not follow its unserved callback
+as a sign-in demo. <code>pkce-negative.mjs</code> automates an actual successful code
+exchange plus four refusals. Use section 1 for a browser callback that completes.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Example</th><th>Expected result</th></tr></thead><tbody><tr><td>Request builder / four-line hashing snippet</td><td>Fresh verifier, S256 challenge and discovered authorization URL</td></tr><tr><td>PKCE negatives</td><td>One HTTP 200; four HTTP 400 responses (wrong verifier, burned code, replay, missing PKCE)</td></tr><tr><td>Decode-only</td><td>Displays fields and says it stopped before validation</td></tr><tr><td>Valid token</td><td>Eight PASS lines and <code>ACCEPT 200</code></td></tr><tr><td>Tamper then validate</td><td><code>REJECT 401</code>, signature failure, exit code 1</td></tr></tbody></table></div>
+<p>Exit code <strong>1 is expected for a rejected token</strong>; run negatives separately,
+not behind <code>&amp;&amp;</code> or a stop-on-error loop.</p>
+<p>PowerShell negative battery, from D&#39;s sample directory:</p>
+<pre><code class="language-powershell">foreach ($v in &#39;expired&#39;,&#39;wrong-issuer&#39;,&#39;wrong-audience&#39;,&#39;not-yet-valid&#39;,&#39;no-scope&#39;,&#39;id-token&#39;,&#39;stale-kid&#39;) {
+  node validate-token.mjs --variant $v --scope campuspulse.read
+}
+</code></pre>
+<p>macOS:</p>
+<pre><code class="language-bash">for v in expired wrong-issuer wrong-audience not-yet-valid no-scope id-token stale-kid; do
+  node validate-token.mjs --variant &quot;$v&quot; --scope campuspulse.read
+done
+</code></pre>
+<p>All reject with 401 except <code>no-scope</code>, which rejects with 403. The validator
+prints instructional verdicts; it is not itself an HTTP resource server.</p>
+<p>Key rotation, from D (both shells):</p>
+<pre><code class="language-console">node -e &quot;fetch(&#39;http://127.0.0.1:9100/rotate&#39;).then(r=&gt;r.json()).then(console.log)&quot;
+node validate-token.mjs --variant valid --scope campuspulse.read
+</code></pre>
+<p>Rotation adds a key and retains old public keys. New tokens still pass. Restarting
+the issuer is different: it discards all keys, so old tokens must be replaced.</p>
+<p>The <code>alg: none</code> and RSA/HMAC-confusion examples are executable local regressions:</p>
+<pre><code class="language-console">node --test identity.test.mjs
+</code></pre>
+<p>That suite owns its own ephemeral issuer/proxy and closes them. It also runs
+the HAR (HTTP Archive) sanitizer and evidence scanner on synthetic inputs, refresh
+rotation/reuse, introspection and both stream-expiry modes. It uses a <strong>stub</strong>
+upstream for policy isolation; section 5 separately tests actual MCP tools.</p>
+<h2 id="3-proxy-plus-real-week-7-server-block-c">3. Proxy plus real Week 7 server (Block C)</h2>
+<p>Keep issuer <strong>A</strong> running from section 2. Start two additional terminals at the
+course-content root; commands in different windows are not one pasteable block.</p>
+<p><strong>Terminal B: proxy</strong>, PowerShell:</p>
+<pre><code class="language-powershell">cd weeks\week08\samples
+$env:PORT=&#39;8930&#39;
+$env:MCP_UPSTREAM=&#39;http://127.0.0.1:8931/mcp&#39;
+$env:ENFORCE_STREAM_EXPIRY=&#39;1&#39;
+node mcp-auth-proxy.mjs
+</code></pre>
+<p>macOS:</p>
+<pre><code class="language-bash">cd weeks/week08/samples
+PORT=8930 ENFORCE_STREAM_EXPIRY=1 MCP_UPSTREAM=http://127.0.0.1:8931/mcp node mcp-auth-proxy.mjs
+</code></pre>
+<p><strong>Terminal C: backend</strong>, PowerShell:</p>
+<pre><code class="language-powershell">cd samples\mcp-starter
+npm ci
+npm run build
+$env:MCP_HOST=&#39;127.0.0.1&#39;; $env:PORT=&#39;8931&#39;
+$env:DATABASE_URL=$null
+npm run start:http
+</code></pre>
+<p>macOS:</p>
+<pre><code class="language-bash">cd samples/mcp-starter
+npm ci
+npm run build
+MCP_HOST=127.0.0.1 PORT=8931 env -u DATABASE_URL npm run start:http
+</code></pre>
+<p>Install/build before class. Expect <code>store=memory</code> (or <code>store : memory</code>) and
+the anonymous-server warning. <strong>Clearing DATABASE_URL is mandatory</strong>: the
+following write is synthetic and must not touch an existing database.</p>
+<p><strong>Terminal D: client</strong>, from the sample directory used in section 2:</p>
+<pre><code class="language-console">node mcp-client-walk.mjs
+node mcp-client-walk.mjs --tool post_incident_update
+node mcp-client-walk.mjs --tool post_incident_update --login-as operator
+node mcp-client-walk.mjs --tool get_incident
+</code></pre>
+<p>Each starts with no token and gets 401. The viewer read ends with 200; the viewer
+write with 403; the operator write with 200. The last command shows the fixed
+public classroom update in <code>incident updates</code>. HTTP 200 with a tool error is
+failure, and a result labelled <strong>STUB</strong> is not proof a backend tool ran.</p>
+<p>Loopback excludes other computers, not programs on this computer: another local
+process can bypass B and call anonymous C directly. This is a teaching boundary,
+not a deployment design. Use the authenticated handler shown by the browser
+demo for your application.</p>
+<h2 id="4-stream-expiry-block-c">4. Stream expiry (Block C)</h2>
+<p>Keep A running. In <strong>B</strong>, stop only your proxy with Ctrl+C, then run:</p>
+<pre><code class="language-powershell">$env:ENFORCE_STREAM_EXPIRY=&#39;0&#39;; node mcp-auth-proxy.mjs
+</code></pre>
+<p>In <strong>D</strong>, run <code>node expiry-mid-connection.mjs --ttl 6 --watch 14</code>.
+Expect negative <code>token_expires_in</code> values while the stream remains open.</p>
+<p>Stop B with Ctrl+C and run:</p>
+<pre><code class="language-powershell">$env:ENFORCE_STREAM_EXPIRY=&#39;1&#39;; node mcp-auth-proxy.mjs
+</code></pre>
+<p>In <strong>D</strong>, run <code>node expiry-mid-connection.mjs --ttl 8 --watch 22</code>.
+Expect <code>token_expired</code> and <code>stream CLOSED</code> instead. On macOS prefix each B start
+with <code>PORT=8930 ENFORCE_STREAM_EXPIRY=0</code> or <code>=1</code> and
+<code>MCP_UPSTREAM=http://127.0.0.1:8931/mcp</code>, as on the slide.</p>
+<p>This is a <strong>synthetic Server-Sent Events (SSE)</strong> stream measuring authorization
+lifetime, not a full MCP subscription implementation. Only issuer and proxy
+are needed for it; no backend tool executes.</p>
+<h2 id="5-repeatable-checks-public-metadata-and-cleanup">5. Repeatable checks, public metadata and cleanup</h2>
+<p>From the course-content root, after the two locked installs in section 1:</p>
+<pre><code class="language-powershell">npm --prefix samples\mcp-starter run build
+node --test weeks\week08\samples\identity.test.mjs weeks\week08\samples\demos.test.mjs
+npm --prefix samples\oidc-web-app test
+</code></pre>
+<p>Use forward slashes on macOS. The real-backend suite verifies read/write
+outcomes <strong>and the timeline readback</strong>; the browser suite checks real redirects,
+password login, viewer denial, exact-text confirmation, refresh, logout and
+negative cases. Browser tests use installed Edge/Chromium; if needed set
+<code>BROWSER_EXECUTABLE</code> to an approved browser executable, not an unrelated process.</p>
+<p>The public discovery/key examples require Internet, but no client registration:</p>
+<pre><code class="language-powershell">curl.exe -fsS --max-time 20 https://accounts.google.com/.well-known/openid-configuration
+curl.exe -fsS -D - --max-time 20 https://www.googleapis.com/oauth2/v3/certs
+</code></pre>
+<p>On macOS replace <code>curl.exe</code> with <code>curl</code>. Key IDs, counts and cache ages change;
+the slides&#39; dated snapshots are not today&#39;s expected literal response.
+Offline, read <code>fixtures/discovery-google.json</code>, <code>fixtures/jwks-google.json</code> and
+the named <code>transcripts/</code> files with <code>Get-Content</code> (PowerShell) or <code>cat</code> (macOS).
+Those files are fallbacks, not claims of a fresh execution.</p>
+<p>Stop your A/B/C servers with Ctrl+C. In D, remove only the forged sample:
+<code>Remove-Item -LiteralPath .\out\forged.txt</code> (PowerShell), or
+<code>rm -f ./out/forged.txt</code> (macOS). Keep other evidence. Raw tokens, codes,
+verifiers and cookies are credentials even on loopback; keep them ignored,
+sanitize and scan before sharing. Conceptual comparisons of opaque OAuth tokens,
+SAML and API keys are not additional implemented local-provider demos.</p>
+
+</main>
+<footer>Individual coursework. D2L contains dated deadlines, submissions and private course access.</footer>
+</body>
+</html>

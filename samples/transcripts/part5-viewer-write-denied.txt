@@ -1,0 +1,74 @@
+
+--------------------------------------------------------------------------
+[1] tools/call post_incident_update with NO Authorization header
+    HTTP 401
+    WWW-Authenticate: Bearer resource_metadata="http://127.0.0.1:8930/.well-known/oauth-protected-resource", scope="campuspulse.incident.write"
+    body: {"error":"unauthorized","error_description":"This MCP server requires an OAuth 2.1 access token. Start at the resource_metadata URL."}
+
+--------------------------------------------------------------------------
+[2] GET http://127.0.0.1:8930/.well-known/oauth-protected-resource   (RFC 9728)
+    {
+      "resource": "http://127.0.0.1:8930/mcp",
+      "authorization_servers": [
+        "http://127.0.0.1:9100"
+      ],
+      "scopes_supported": [
+        "campuspulse.read",
+        "campuspulse.incident.write"
+      ],
+      "bearer_methods_supported": [
+        "header"
+      ],
+      "resource_documentation": "https://campuspulse.example/docs/mcp"
+    }
+
+--------------------------------------------------------------------------
+[3] GET http://127.0.0.1:9100/.well-known/oauth-authorization-server
+    issuer                        http://127.0.0.1:9100   (matches the PRM entry)
+    authorization_endpoint        http://127.0.0.1:9100/authorize
+    token_endpoint                http://127.0.0.1:9100/token
+    jwks_uri                      http://127.0.0.1:9100/jwks.json
+    code_challenge_methods        S256
+    iss in auth response          true
+
+--------------------------------------------------------------------------
+[4] authorization request (PKCE + resource)
+    code_challenge_method=S256
+    code_challenge=24vAgAg2GZamVFPDSW9wUPXT7oZS7wfsAw-y6BIJlwk
+    resource=http://127.0.0.1:8930/mcp
+    scope=openid campuspulse.incident.write
+           ^ from the WWW-Authenticate challenge — least privilege
+    signed in as: viewer
+
+--------------------------------------------------------------------------
+[5] authorization response validation
+    state   OK   returned=SZgiYMKaLlO_W0crw8vLLg
+    iss     OK   returned=http://127.0.0.1:9100 expected=http://127.0.0.1:9100   (RFC 9207)
+    code    lab_0fe4f20f…  <- assume this leaked; PKCE is why that is survivable
+
+--------------------------------------------------------------------------
+[6] POST http://127.0.0.1:9100/token   ->  HTTP 200
+    token_type    Bearer
+    expires_in    900s
+    scope         openid
+    id_token      present (for the CLIENT — never send it to the API)
+
+    access-token claims that decide the next request:
+      iss    http://127.0.0.1:9100
+      aud    http://127.0.0.1:8930/mcp      <- must be http://127.0.0.1:8930/mcp
+      sub    a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11
+      scope  openid
+      roles  ["viewer"]
+      exp    1786829758  (2026-08-15T21:35:58.000Z)
+
+--------------------------------------------------------------------------
+[7] tools/call post_incident_update WITH the access token
+    HTTP 403
+    WWW-Authenticate: Bearer resource_metadata="http://127.0.0.1:8930/.well-known/oauth-protected-resource", error="insufficient_scope", scope="campuspulse.incident.write", error_description="post_incident_update requires campuspulse.incident.write"
+    body: {"error":"insufficient_scope","error_description":"post_incident_update requires campuspulse.incident.write","required_scope":"campuspulse.incident.write","granted_scope":["openid"]}
+
+==========================================================================
+RESULT  401 -> 403. Authentication succeeded; authorization did not.
+        Re-run with --login-as operator and read the difference.
+==========================================================================
+

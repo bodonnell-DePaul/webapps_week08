@@ -1,0 +1,41 @@
+
+token, redacted for submission
+  <header 110 chars>
+  .eyJpc3MiOiJodHRwOi8v…<500 chars>
+  .mXWTbKXK7OihLj…<342 chars>
+
+decode  — this proves nothing. Anyone can do it. Including an attacker.
+  header  {"alg":"RS256","typ":"at+jwt","kid":"Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s"}
+  payload {
+            "iss": "http://127.0.0.1:9100",
+            "sub": "a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11",
+            "aud": "http://127.0.0.1:8930/mcp",
+            "client_id": "campuspulse-web",
+            "azp": "campuspulse-web",
+            "exp": 1786829756,
+            "iat": 1786828856,
+            "nbf": 1786828856,
+            "jti": "285db04d-134d-4bfa-bcdf-e7822a13ad3c",
+            "typ": "Bearer",
+            "scope": "openid campuspulse.read",
+            "roles": [
+              "viewer"
+            ],
+            "amr": [
+              "pwd"
+            ],
+            "campuspulse/campus": "Riverbend"
+          }
+
+validate  against http://127.0.0.1:9100/jwks.json
+  PASS  alg is on the allow-list           header.alg=RS256; allowed=RS256
+  PASS  kid resolves in JWKS               kid=Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s
+  PASS  signature verifies                 RS256 over header.payload
+  PASS  iss matches configured issuer      token iss=http://127.0.0.1:9100  expected=http://127.0.0.1:9100
+  PASS  aud contains this resource server  token aud="http://127.0.0.1:8930/mcp"  expected to contain=http://127.0.0.1:8930/mcp
+  PASS  exp is in the future               exp=1786829756 (2026-08-15T21:35:56.000Z), now=1786828856, delta=900s, skew=60s
+  PASS  nbf/iat are not in the future      nbf=1786828856 iat=1786828856 now=1786828856 skew=60s
+  PASS  scope includes campuspulse.read    granted=[openid campuspulse.read]
+
+ACCEPT 200  sub=a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11 scope=[openid campuspulse.read] roles=["viewer"]
+

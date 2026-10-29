@@ -1,0 +1,1374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Week 8: Identity: OAuth, OIDC, Claims — and Authorizing the MCP Server — class notes - CSC 436</title>
+<link rel="stylesheet" href="../../assets/course.css">
+<link rel="icon" type="image/svg+xml" href="../../assets/course-icon.svg">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header><a class="course-name" href="../../index.html">CSC 436</a>
+<nav aria-label="Course">
+<a href="../../docs/getting-started.html">Start here</a>
+<a href="../../docs/new_syllabus.html">Syllabus</a>
+<a href="../../docs/course-map.html">Course map</a>
+<a href="../../final-project/index.html">Final project</a>
+</nav></header>
+<main id="main">
+<p class="source-link"><a href="class-notes.md" download>Download Markdown source</a></p>
+<h1 id="week-8-identity-oauth-oidc-claims--and-authorizing-the-mcp-server--class-notes">Week 8: Identity: OAuth, OIDC, Claims — and Authorizing the MCP Server — class notes</h1>
+<p>These notes contain the student-visible teaching material and examples. Complete the exercises individually. Instructor delivery notes and answer keys are not included.</p>
+<h2 id="weekly-session--identity-oauth-oidc-claims--and-authorizing-the-mcp-server">Weekly session — Identity: OAuth, OIDC, Claims — and Authorizing the MCP Server</h2>
+<p>Review, preparation, logistics, teaching, individual practice, and the end-of-class brief</p>
+<h2 id="short-review">Short review</h2>
+<h3 id="the-words-behind-sign-in-with">The words behind &quot;Sign in with...&quot;</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Term</th><th>Think of your student project</th></tr></thead><tbody><tr><td>Authentication</td><td>&quot;Who signed in?&quot; A campus identity check</td></tr><tr><td>Authorization</td><td>&quot;May this person post a Wi-Fi outage update?&quot;</td></tr><tr><td>OAuth</td><td>Delegated authorization: let an app act without giving it your password</td></tr><tr><td>OpenID Connect (OIDC)</td><td>The login layer on OAuth: tells the client who signed in</td></tr><tr><td>Access token</td><td>A temporary credential the app presents to a service</td></tr><tr><td>Scope</td><td>A named permission, such as read status but not write updates</td></tr></tbody></table></div>
+<h3 id="acronyms-you-will-see-on-the-wire">Acronyms you will see on the wire</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Short name</th><th>Full name and job</th></tr></thead><tbody><tr><td>API</td><td>Application Programming Interface: software calls</td></tr><tr><td>JSON</td><td>JavaScript Object Notation: structured data</td></tr><tr><td>JWT</td><td>JSON Web Token: a claims format</td></tr><tr><td>JWKS</td><td>JSON Web Key Set: public verification keys</td></tr><tr><td>PKCE</td><td>Proof Key for Code Exchange (&quot;pixy&quot;)</td></tr><tr><td>HTTP / TLS</td><td>Hypertext Transfer Protocol / Transport Layer Security</td></tr></tbody></table></div>
+<h3 id="what-you-shipped-last-week-exactly-as-you-left-it">What you shipped last week, exactly as you left it</h3>
+<ul>
+<li>Recall the Week 7 starter&#39;s <code>/healthz</code> response:
+<code>&quot;authorization&quot;:&quot;none&quot;</code></li>
+<li>It has real tools, a real state-changing action, and a real MCP App</li>
+<li>Without authorization, anyone who can reach that port can call its tools;
+this is why the Week 7 exercise stayed on loopback</li>
+</ul>
+<h2 id="prelecture-review">Prelecture review</h2>
+<h3 id="two-answers-from-your-prep-before-we-start">Two answers from your prep, before we start</h3>
+<h4 id="q1--what-is-oauth-actually-for">Q1 — What is OAuth actually for?</h4>
+<p><strong>B — letting one app act on your behalf at another, without your password.</strong>
+If you picked &quot;proving who you are,&quot; that is the mistake this block spends its
+first minutes correcting.</p>
+<h4 id="q4--what-does-jwtio-prove">Q4 — What does jwt.io prove?</h4>
+<p><strong>D — decoding alone only shows contents, not whether they are trustworthy.</strong>
+A debugger may also verify a signature if correctly configured; that still does
+not decide your application&#39;s permissions. Do not upload real tokens.</p>
+<h2 id="weekly-logistics">Weekly logistics</h2>
+<h3 id="addresses-you-will-configure">Addresses you will configure</h3>
+<ul>
+<li><strong>URL (Uniform Resource Locator):</strong> a web address you can open</li>
+<li><strong>URI (Uniform Resource Identifier):</strong> an identifier; our callback URIs are URLs</li>
+<li><strong>Endpoint:</strong> a specific address an application calls for one job</li>
+<li><strong>Callback:</strong> where the provider sends your browser back after approval</li>
+<li><strong>HTTPS:</strong> HTTP protected by TLS; encrypts traffic between endpoints</li>
+</ul>
+<h3 id="configuration-is-an-address-book-not-magic">Configuration is an address book, not magic</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Setting</th><th>What it identifies</th></tr></thead><tbody><tr><td>Tenant / issuer</td><td>Provider workspace / exact token issuer</td></tr><tr><td>Discovery URL</td><td>Endpoint directory at a trusted web address</td></tr><tr><td>Client ID</td><td>Public registration identifier for your app, not a password</td></tr><tr><td>Redirect URI</td><td>Registered callback address receiving the code</td></tr><tr><td>Resource / audience (<code>aud</code>)</td><td>Service requested / token&#39;s intended recipient</td></tr><tr><td>Client secret</td><td>Backend-only credential; never put it in browser code</td></tr></tbody></table></div>
+<h3 id="two-scopes-one-isolation-rule">Two scopes, one isolation rule</h3>
+<h4 id="permissions-to-configure">Permissions to configure</h4>
+<ul>
+<li>Read: <code>campuspulse.read</code></li>
+<li>Write: <code>campuspulse.incident.write</code></li>
+<li>Use your assigned registrations, not another student&#39;s</li>
+</ul>
+<h4 id="keep-it-isolated">Keep it isolated</h4>
+<ul>
+<li>Keep the server on <code>127.0.0.1</code> (loopback: only this computer)</li>
+<li>Do not expose an unauthenticated endpoint</li>
+<li>Missing tenant values: contact the instructor</li>
+</ul>
+<h2 id="block-a--delegation-and-the-flow">Block A — Delegation and the flow</h2>
+<h3 id="before-any-command-choose-the-course-root">Before any command: choose the course root</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Your starting point</th><th>Where to run commands</th></tr></thead><tbody><tr><td>Master checkout (<code>instructor</code> + <code>student</code>)</td><td><code>cd instructor</code> in each new terminal</td></tr><tr><td>Downloaded student course</td><td>Stay in its top folder, containing <code>weeks</code> and <code>samples</code></td></tr><tr><td>Caption says &quot;repository root&quot; below</td><td>It means this <strong>course-content root</strong>, not the master checkout</td></tr><tr><td>PowerShell / macOS slides</td><td>Choose one shell; do not run both alternatives</td></tr><tr><td>Runtime</td><td>Node.js 24 LTS (Long-Term Support); use <code>node --version</code> to check</td></tr></tbody></table></div>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/index.html">Every demo: servers, clients, expected results, cleanup</a></li>
+</ul>
+<h3 id="first-a-login-that-comes-back-to-your-app">First, a login that comes back to your app</h3>
+<pre><code class="language-powershell">npm --prefix samples\mcp-starter ci
+npm --prefix samples\oidc-web-app ci
+npm --prefix samples\oidc-web-app run demo
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>The launcher starts the browser application&#39;s backend, a local identity provider,
+and the authenticated resource server. Open the printed application URL.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="../../samples/oidc-web-app/index.html">Complete browser sign-in demo</a></li>
+</ul>
+<h3 id="macos-the-same-complete-browser-application">macOS: the same complete browser application</h3>
+<pre><code class="language-bash">npm --prefix samples/mcp-starter ci
+npm --prefix samples/oidc-web-app ci
+npm --prefix samples/oidc-web-app run demo
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Open the printed application URL, not a guessed port. The page is the interface;
+the backend is the OAuth client. Keep the launcher running until Ctrl+C.</p>
+</blockquote>
+<h3 id="try-it-as-a-student-then-as-the-help-desk">Try it as a student, then as the help desk</h3>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Success means you return to a working page and see actual data. A callback
+connection error is not a completed sign-in. No external tenant is needed.</p>
+</blockquote>
+<h4 id="viewer-is-campus-wi-fi-down">Viewer: &quot;Is campus Wi-Fi down?&quot;</h4>
+<ol>
+<li>Click <strong>Sign in with course identity</strong></li>
+<li>Use this run&#39;s synthetic viewer account</li>
+<li>Read services and <code>INC-2026-0016</code></li>
+<li>Sign out; finish the provider prompt</li>
+</ol>
+<h4 id="operator-i-can-publish-an-update">Operator: &quot;I can publish an update&quot;</h4>
+<ol>
+<li>Sign in with the synthetic operator</li>
+<li>Enter text, then <strong>Review update</strong></li>
+<li><strong>Confirm and publish</strong>; see the timeline</li>
+<li>Sign out, then Ctrl+C in the launcher</li>
+</ol>
+<h3 id="who-can-keep-a-client-secret">Who can keep a client secret?</h3>
+<h4 id="public-client">Public client</h4>
+<p>Browser code or an installed app is inspectable by its user.
+An embedded secret cannot stay secret. Use PKCE, not a hidden password.</p>
+<h4 id="confidential-client">Confidential client</h4>
+<p>A backend can keep its credential on the server.
+Our Backend-for-Frontend (BFF) is this OAuth client; the browser is its interface.
+It still uses PKCE.</p>
+<h3 id="the-redirects-small-pieces-each-have-one-job">The redirect&#39;s small pieces each have one job</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Piece</th><th>What your client does with it</th></tr></thead><tbody><tr><td>Code</td><td>Short-lived, single-use exchange ticket; not an API credential</td></tr><tr><td>Verifier / challenge</td><td>Keep a random secret; send its one-way hash first</td></tr><tr><td><code>S256</code></td><td>SHA-256 (Secure Hash Algorithm, 256-bit) challenge method</td></tr><tr><td><code>state</code></td><td>Match callback to the pending login; resist cross-site request forgery (CSRF)</td></tr><tr><td><code>nonce</code></td><td>&quot;Number used once&quot;: match the identity token to this login attempt</td></tr><tr><td>Bearer</td><td>Whoever possesses the access token can use it; keep it private</td></tr></tbody></table></div>
+<h3 id="fictional-campuspulse-case-a-stolen-code-is-not-yet-a-stolen-token">Fictional CampusPulse case: a stolen code is not yet a stolen token</h3>
+<h4 id="maya-authorizes-the-client">Maya authorizes the client</h4>
+<ul>
+<li>Scope requested: <code>campuspulse.read</code></li>
+<li>The browser returns a short-lived code to the client</li>
+<li>Her password is entered only at the identity provider</li>
+</ul>
+<h4 id="another-app-takes-the-code">Another app takes the code</h4>
+<ul>
+<li>It has the code but not the client&#39;s random verifier</li>
+<li>The token endpoint rejects the mismatched PKCE proof</li>
+<li><code>state</code> protects the client session; PKCE protects the code</li>
+</ul>
+<h3 id="a-study-planner-needs-permission-to-read-your-timetable-it-does-not-need-your-campus-password-your-grades-or-permission-to-change-your-courses">A study planner needs permission to read your timetable. It does not need your campus password, your grades, or permission to change your courses.</h3>
+<blockquote>
+<p>A study planner needs permission to read your timetable. It does not need your campus password, your grades, or permission to change your courses.</p>
+</blockquote>
+<p>— The sentence that makes OAuth make sense</p>
+<h3 id="the-problem-was-never-log-in-it-was-act-on-my-behalf">The problem was never &quot;log in&quot;. It was &quot;act on my behalf&quot;</h3>
+<ul>
+<li>A study planner needs <strong>your timetable</strong>, not your campus password</li>
+<li>Password sharing gives it whatever your whole account can do</li>
+<li>OAuth lets the provider grant <strong>limited permissions and a token lifetime</strong></li>
+<li>You approve at the provider; later calls carry a token, not your password</li>
+</ul>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>OAuth answers <em>&quot;may this software do this specific thing to this resource on
+behalf of this person?&quot;</em> It does not answer <em>&quot;who is this person?&quot;</em> That is
+OIDC, and confusing the two is the most expensive mistake in this unit.</p>
+</blockquote>
+<h3 id="four-actors-and-where-trust-stops">Four actors, and where trust stops</h3>
+<p><img src="../../assets/class-notes/week08-session-s18-1.svg" alt="Diagram of four OAuth actors. The resource owner uses a client. The client talks to an authorization server to get a token, and to a resource server to use it. A first trust boundary sits between the client and the authorization server, a second between the client and the resource server. The client is labelled untrusted."></p>
+<p><em>Four actors, two trust boundaries. Everything that goes wrong this week goes wrong at a boundary.</em></p>
+<h3 id="oidc-is-a-profile-of-oauth-not-a-competitor">OIDC is a profile of OAuth, not a competitor</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th></th><th>OAuth 2.x</th><th>+ OpenID Connect</th></tr></thead><tbody><tr><td>Answers</td><td>may this app do X?</td><td>…and who is the user?</td></tr><tr><td>You get</td><td><code>access_token</code></td><td>…plus an <code>id_token</code></td></tr><tr><td>Consumed by</td><td>the <strong>API</strong></td><td>the <strong>client</strong>, once</td></tr><tr><td>Format</td><td>opaque <strong>or</strong> JWT</td><td><strong>always</strong> a JWT</td></tr><tr><td>Metadata doc</td><td>RFC 8414 <em>(optional)</em></td><td>OIDC Discovery <em>(optional)</em></td></tr><tr><td>Claims (token fields)</td><td>format/profile-specific</td><td>issuer, subject, audience, expiry, issued-at</td></tr></tbody></table></div>
+<p><strong>Sources</strong></p>
+<ul>
+<li>OpenID Foundation — <a href="https://openid.net/specs/openid-connect-core-1_0.html">OpenID Connect Core 1.0</a></li>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc8414.html">RFC 8414, Authorization Server Metadata</a></li>
+</ul>
+<h3 id="discover-the-providers-endpoints">Discover the provider&#39;s endpoints</h3>
+<pre><code class="language-console">$ curl -fsS https://accounts.google.com/.well-known/openid-configuration
+{
+ &quot;issuer&quot;: &quot;https://accounts.google.com&quot;,
+ &quot;authorization_endpoint&quot;: &quot;https://accounts.google.com/o/oauth2/v2/auth&quot;,
+ &quot;token_endpoint&quot;: &quot;https://oauth2.googleapis.com/token&quot;,
+ &quot;jwks_uri&quot;: &quot;https://www.googleapis.com/oauth2/v3/certs&quot;,
+ &quot;code_challenge_methods_supported&quot;: [&quot;plain&quot;, &quot;S256&quot;]
+}
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Start discovery from an issuer you trust. Read its endpoint addresses rather
+than guessing paths. In PowerShell use <code>curl.exe</code>; on macOS use <code>curl</code>.</p>
+</blockquote>
+<h3 id="the-keys-are-public-plural-and-they-rotate">The keys are public, plural, and they rotate</h3>
+<pre><code class="language-console">$ curl -fsS -D - https://www.googleapis.com/oauth2/v3/certs
+cache-control: no-transform, public, must-revalidate, max-age=21144
+{&quot;keys&quot;:[
+ {&quot;kty&quot;:&quot;RSA&quot;,&quot;alg&quot;:&quot;RS256&quot;,&quot;use&quot;:&quot;sig&quot;,
+  &quot;kid&quot;:&quot;49900291d36cec8c018f2e8af3ef235b8b18d3c9&quot;, &quot;e&quot;:&quot;AQAB&quot;, &quot;n&quot;:&quot;...&quot;},
+ {&quot;kty&quot;:&quot;RSA&quot;,&quot;alg&quot;:&quot;RS256&quot;,&quot;use&quot;:&quot;sig&quot;,
+  &quot;kid&quot;:&quot;8ff13a6fcdabf306712e58f35668a04eb5a5fae1&quot;, &quot;...&quot;:&quot;...&quot;},
+ {&quot;kty&quot;:&quot;RSA&quot;,&quot;alg&quot;:&quot;RS256&quot;,&quot;use&quot;:&quot;sig&quot;, &quot;kid&quot;:&quot;943a...7acba&quot;},
+ {&quot;kty&quot;:&quot;RSA&quot;,&quot;alg&quot;:&quot;RS256&quot;,&quot;use&quot;:&quot;sig&quot;, &quot;kid&quot;:&quot;f10f...c271&quot;}]}
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>This dated snapshot had four keys; today&#39;s count and values may differ.
+<code>kid</code> means key ID: match it, never choose the first key. PowerShell: <code>curl.exe</code>.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc7517.html">RFC 7517, JSON Web Key</a></li>
+</ul>
+<h3 id="authorization-code-with-pkce">Authorization Code with PKCE</h3>
+<h3 id="the-flow-you-should-default-to-every-time">The flow you should default to, every time</h3>
+<p><img src="../../assets/class-notes/week08-session-s23-1.svg" alt="Sequence diagram with four columns: user agent, client, authorization server, resource server. The client generates a verifier and challenge, redirects the browser to the authorization server with the challenge, the user consents, an authorization code returns through the browser, the client posts the code plus the verifier to the token endpoint, receives an access token, and calls the resource server with it."></p>
+<p><em>Ten steps. The browser carries the code; only the client can spend it.</em></p>
+<h3 id="pkce-is-four-lines-of-arithmetic">PKCE is four lines of arithmetic</h3>
+<pre><code class="language-javascript">import { createHash, randomBytes } from &#39;node:crypto&#39;;
+const b64url = b =&gt; Buffer.from(b).toString(&#39;base64url&#39;);
+
+const codeVerifier  = b64url(randomBytes(32)); // 43 chars, 256 bits
+const codeChallenge = b64url(
+  createHash(&#39;sha256&#39;).update(codeVerifier).digest());
+
+// AUTH request: code_challenge + method=S256
+// TOKEN request: code_verifier, over TLS, from your client only
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Run <code>node pkce.mjs</code> with the lab issuer running. Base64url makes URL-safe text;
+hashing makes a one-way fingerprint.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc7636.html">RFC 7636, Proof Key for Code Exchange</a></li>
+</ul>
+<h3 id="inspect-a-request-test-its-exchange">Inspect a request; test its exchange</h3>
+<h4 id="steps">Steps</h4>
+<ol>
+<li><code>weeks/week08/samples</code> (<code>\</code> on Windows), course Node <strong>24 LTS</strong></li>
+<li><strong>A</strong>: the <em>local</em> lab issuer <code>:9100</code> — not a real provider</li>
+<li><strong>B</strong>: PKCE, then negatives. Ctrl+C in Terminal A after</li>
+</ol>
+<h4 id="expected-observations">Expected observations</h4>
+<ul>
+<li>URL builder: parameters only</li>
+<li>Exchange: one success, four refusals</li>
+</ul>
+<h4 id="fallback">Fallback</h4>
+<p>Use the offline transcript slide.</p>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="lab.html">Week 8 lab, Parts 0–2</a></li>
+<li>Course — <a href="samples/authz-server.mjs">lab authorization server</a></li>
+</ul>
+<h3 id="terminal-a-the-lab-issuer">Terminal A: the lab issuer</h3>
+<pre><code class="language-powershell">cd weeks\week08\samples
+node authz-server.mjs
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>It binds to <code>127.0.0.1:9100</code>, prints its issuer, JWKS, and active <code>kid</code>, then blocks.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/authz-server.mjs">lab authorization server</a></li>
+</ul>
+<h3 id="macos-the-lab-issuer">macOS: the lab issuer</h3>
+<pre><code class="language-bash">cd weeks/week08/samples
+node authz-server.mjs
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>It binds to <code>127.0.0.1:9100</code>, prints its issuer, JWKS, and active <code>kid</code>, then blocks.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/authz-server.mjs">lab authorization server</a></li>
+</ul>
+<h3 id="terminal-b-build-it-then-break-it">Terminal B: build it, then break it</h3>
+<pre><code class="language-powershell">cd weeks\week08\samples
+node pkce.mjs
+# Inspect the URL only: this helper has no callback server.
+
+node pkce-negative.mjs
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p><code>pkce.mjs</code> builds parameters. <code>pkce-negative.mjs</code> makes one successful exchange
+and four expected refusals. Use the browser demo for an actual sign-in.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="lab.html">Week 8 lab, Part 2</a></li>
+</ul>
+<h3 id="macos-build-it-then-break-it">macOS: build it, then break it</h3>
+<pre><code class="language-bash">cd weeks/week08/samples
+node pkce.mjs
+# Inspect the URL only: this helper has no callback server.
+
+node pkce-negative.mjs
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p><code>pkce.mjs</code> builds parameters. <code>pkce-negative.mjs</code> makes one successful exchange
+and four expected refusals. Use the browser demo for an actual sign-in.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="lab.html">Week 8 lab, Part 2</a></li>
+</ul>
+<h3 id="a-stolen-code-fails-without-the-verifier">A stolen code fails without the verifier</h3>
+<pre><code class="language-console">$ node pkce-negative.mjs
+[A] code  lab_798601197cd070b880b5caacf6a80c5bc83aeb…
+
+--- exchange with the WRONG code_verifier --------------------
+HTTP 400
+{ &quot;error&quot;: &quot;invalid_grant&quot;,
+  &quot;error_description&quot;: &quot;PKCE verification failed&quot;,
+  &quot;expected_challenge&quot;: &quot;z_1m6MhVmoJag5sEMKeOZYshyx…&quot;,
+  &quot;computed_challenge&quot;: &quot;S8PQCZIMviVjOxZP2iqQH5p…&quot; }
+</code></pre>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9700.html">RFC 9700, OAuth 2.0 Security Best Current Practice §2.1.1</a></li>
+</ul>
+<h3 id="a-failed-exchange-can-burn-the-code">A failed exchange can burn the code</h3>
+<pre><code class="language-console">--- the RIGHT verifier, on that same code --------------------
+HTTP 400
+{ &quot;error&quot;: &quot;invalid_grant&quot;,
+  &quot;error_description&quot;: &quot;unknown or already-redeemed code&quot; }
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>This server burns the code after any redemption attempt. RFC 7636 requires rejection; test whether your provider also revokes.</p>
+</blockquote>
+<h3 id="what-those-failures-prove">What those failures prove</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>What you saw</th><th>It proves</th><th>It does not prove</th></tr></thead><tbody><tr><td><code>invalid_grant</code>, wrong verifier</td><td><strong>This</strong> server enforces <code>S256</code></td><td>Your provider does</td></tr><tr><td><code>expected</code> vs <code>computed</code> shown</td><td>A teaching affordance</td><td>Real servers are this generous</td></tr><tr><td>Right verifier, code gone</td><td>This server burns the code</td><td>The RFCs require revocation</td></tr><tr><td>No-PKCE request refused</td><td>OAuth 2.1 behavior, here</td><td>Your tenant refuses it too</td></tr><tr><td>Every row above</td><td>A local model of a provider</td><td>Anything about your tenant</td></tr></tbody></table></div>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc7636.html">RFC 7636 §4.6</a></li>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9700.html">RFC 9700 §2.1.1</a></li>
+</ul>
+<h3 id="offline-path-then-shut-it-down">Offline path, then shut it down</h3>
+<pre><code class="language-powershell">Get-Content .\weeks\week08\samples\transcripts\part2-pkce-negative.txt
+Get-Content .\weeks\week08\samples\fixtures\discovery-google.json
+
+# Cleanup: Ctrl+C in Terminal A; close the consent browser tab
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>The issuer&#39;s signing key lives in memory and dies with its process.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/transcripts/part2-pkce-negative.txt">captured PKCE negatives</a></li>
+<li>Course — <a href="samples/fixtures/discovery-google.json">Google discovery snapshot, 2026-08-15</a></li>
+</ul>
+<h3 id="macos-offline-path-then-shut-down">macOS: offline path, then shut down</h3>
+<pre><code class="language-bash">cat ./weeks/week08/samples/transcripts/part2-pkce-negative.txt
+head -n 40 ./weeks/week08/samples/fixtures/discovery-google.json
+
+# Cleanup: Ctrl+C in Terminal A; close the consent browser tab
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>The issuer&#39;s signing key lives in memory and dies with its process.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/transcripts/part2-pkce-negative.txt">captured PKCE negatives</a></li>
+<li>Course — <a href="samples/fixtures/discovery-google.json">Google discovery snapshot, 2026-08-15</a></li>
+</ul>
+<h3 id="five-parameters-five-different-attacks">Five parameters, five different attacks</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Parameter</th><th>From</th><th>Checked by</th><th>Stops</th></tr></thead><tbody><tr><td><code>state</code></td><td>client</td><td>client, on callback</td><td><strong>CSRF</strong></td></tr><tr><td><code>code_challenge</code></td><td>client</td><td>authz server</td><td><strong>code interception</strong></td></tr><tr><td><code>nonce</code></td><td>client</td><td>client, in the ID token</td><td><strong>ID token replay</strong></td></tr><tr><td><code>resource</code></td><td>client</td><td>authz server → <code>aud</code></td><td><strong>reuse at another API</strong></td></tr><tr><td><code>iss</code></td><td>authz server</td><td>client, on callback</td><td><strong>provider mix-up</strong></td></tr></tbody></table></div>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9700.html">RFC 9700 §2.1, on <code>state</code>, PKCE, and <code>nonce</code></a></li>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9207.html">RFC 9207, Authorization Server Issuer Identification</a></li>
+</ul>
+<h3 id="why-the-implicit-flow-died">Why the implicit flow died</h3>
+<h4 id="what-it-did">What it did</h4>
+<ul>
+<li>Asked for <code>response_type=token</code></li>
+<li>Got an <strong>access token in the URL fragment</strong></li>
+<li>No code, no token endpoint, no exchange</li>
+</ul>
+<pre><code class="language-text">#access_token=…
+</code></pre>
+<h4 id="why-it-is-gone">Why it is gone</h4>
+<ul>
+<li>Tokens land in history and logs</li>
+<li>No client authentication, ever</li>
+<li>No refresh token, no requester binding</li>
+</ul>
+<blockquote>
+<p><strong>Failure to avoid</strong></p>
+<p>OAuth 2.1 removed it. So did MCP. Do not use it in new applications.</p>
+</blockquote>
+<h3 id="four-easy-mistakes-and-how-to-avoid-them">Four easy mistakes, and how to avoid them</h3>
+<ul>
+<li><strong>Hardcoding endpoints</strong> instead of reading them out of the discovery document</li>
+<li><strong><code>code_challenge_method=plain</code></strong>, because the provider advertises it and it works</li>
+<li>Reusing one <code>code_verifier</code> across requests — no error, no protection</li>
+<li>Skipping the <code>iss</code> check on the callback because &quot;it worked&quot;</li>
+</ul>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p>Every one of these produces a <strong>working login</strong>. None of them produces a safe
+one. This is the delegation line from Week 1: the correctness oracle is not
+your compiler, it is a remote system with its own clock and its own operator.</p>
+</blockquote>
+<h3 id="fill-in-the-four-roles-for-your-own-mcp-server--and-say-who-holds-what">Fill in the four roles for your own MCP server — and say who holds what</h3>
+<ol>
+<li>Your MCP server is at <code>https://mcp.&lt;yourname&gt;.example/mcp</code>. Who is the <strong>resource owner</strong>, the <strong>client</strong>, the <strong>authorization server</strong>, and the <strong>resource server</strong>?</li>
+<li>Which of them may hold a <strong>client secret</strong>, and why can the others not?</li>
+<li>An attacker reads your browser history and finds <code>?code=…</code>. What else do they need, and where does it live?</li>
+</ol>
+<p><strong>Sources</strong></p>
+<ul>
+<li>MCP — <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization">Authorization, specification 2026-07-28</a></li>
+</ul>
+<h2 id="block-b--claims-and-validation">Block B — Claims and validation</h2>
+<h3 id="tokens-and-claims--decoding-is-not-validation">Tokens and claims — decoding is not validation</h3>
+<p>What is inside a token, who each claim is for, and the eight checks that stand between you and a forged one</p>
+<p>You have a token. <strong>Having one and being able to trust one are different problems.</strong></p>
+<h3 id="token-vocabulary-before-we-inspect-one">Token vocabulary before we inspect one</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Term</th><th>Plain meaning</th></tr></thead><tbody><tr><td>JSON Web Token (JWT, &quot;jot&quot;)</td><td>A portable set of claims in JavaScript Object Notation (JSON)</td></tr><tr><td>Claim</td><td>A field asserting something; decoding does not make it true</td></tr><tr><td><code>iss</code> / <code>sub</code></td><td>Issuer / subject: who issued it / who it describes</td></tr><tr><td><code>aud</code></td><td>Audience: the intended recipient, not the person holding it</td></tr><tr><td><code>exp</code> / <code>nbf</code> / <code>iat</code></td><td>Expiration / not-before / issued-at, in Unix seconds</td></tr><tr><td>API / ID token</td><td>Application Programming Interface / identity token for the client</td></tr></tbody></table></div>
+<h3 id="why-a-jwt-a-signed-campus-day-pass">Why a JWT? A signed campus day pass</h3>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Useful across independent services. Not automatically better for a one-server
+student app: a revocable server-side session is often simpler.</p>
+</blockquote>
+<h4 id="what-the-issuer-writes">What the issuer writes</h4>
+<ul>
+<li>Subject: this student</li>
+<li>Audience: this building, not every building</li>
+<li>Scope: enter the study room, not the server room</li>
+<li>Expiry: valid until a stated time</li>
+</ul>
+<h4 id="what-the-service-can-check">What the service can check</h4>
+<ul>
+<li>The issuer signs the fields</li>
+<li>The service checks that signature locally</li>
+<li>It still checks the building, time and permission</li>
+<li>It need not phone the issuer on every request</li>
+</ul>
+<h3 id="fictional-campuspulse-case-valid-signature-wrong-audience">Fictional CampusPulse case: valid signature, wrong audience</h3>
+<h4 id="what-the-client-sends">What the client sends</h4>
+<ul>
+<li>An ID token signed by the expected provider</li>
+<li>Issuer (<code>iss</code>) and expiration (<code>exp</code>) pass</li>
+<li><code>aud</code> is <code>campuspulse-web</code>, the browser client</li>
+</ul>
+<h4 id="what-the-api-decides">What the API decides</h4>
+<ul>
+<li>The resource server expects <strong>its own</strong> audience, not the web client&#39;s ID</li>
+<li>It returns 401 before any incident data is read</li>
+<li>Decoding explains the token; validation decides whether to trust it here</li>
+</ul>
+<h3 id="three-tokens-three-jobs">Three tokens, three jobs</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th></th><th>Access token</th><th>ID token</th><th>Refresh token</th></tr></thead><tbody><tr><td>Answers</td><td>may this app do X?</td><td>who signed in?</td><td>another access token?</td></tr><tr><td><code>aud</code> names</td><td>the <strong>API</strong></td><td>the <strong>client</strong></td><td>n/a</td></tr><tr><td>Read by</td><td>resource server</td><td>client at sign-in</td><td>authorization server</td></tr><tr><td>Format</td><td>opaque <strong>or</strong> JWT</td><td><strong>always</strong> JWT</td><td>usually opaque</td></tr><tr><td>Typical life</td><td>5–60 min</td><td>minutes</td><td>days–months, rotating</td></tr><tr><td>Never</td><td>put it in a URL</td><td>use it as an API credential</td><td>send it to the resource API</td></tr></tbody></table></div>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9068.html">RFC 9068, JWT Profile for OAuth Access Tokens</a></li>
+</ul>
+<h3 id="jwt-or-opaque-where-is-the-decision-data">JWT or opaque: where is the decision data?</h3>
+<h4 id="jwt--self-contained">JWT — self-contained</h4>
+<ul>
+<li>Verify with a cached JSON Web Key Set (JWKS)</li>
+<li>Local computation; no issuer call on a cache hit</li>
+<li>Claims stay fixed; signatures do not hide them</li>
+</ul>
+<h4 id="opaque--a-database-handle">Opaque — a database handle</h4>
+<ul>
+<li>Random handle; permissions live in a server record</li>
+<li>Introspection asks the issuer: active, and allowed what?</li>
+<li>Disabling the record works at the next fresh check</li>
+<li>Caching delays that revocation</li>
+</ul>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc7662.html">RFC 7662, Token Introspection</a></li>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9068.html">RFC 9068, JWT Profile for Access Tokens</a></li>
+<li>Curity — <a href="https://curity.io/resources/learn/phantom-token-pattern/">The Phantom Token pattern</a></li>
+</ul>
+<h3 id="alternatives-sessions-and-opaque-tokens">Alternatives: sessions and opaque tokens</h3>
+<h4 id="server-side-session">Server-side session</h4>
+<ul>
+<li>Cookie sends a random session identifier</li>
+<li>App looks up the user, permissions and expiry</li>
+<li>Delete the record to end the session</li>
+<li>One web app; replicas need shared state</li>
+</ul>
+<h4 id="opaque-oauth-access-token">Opaque OAuth access token</h4>
+<ul>
+<li>Client presents a random token string</li>
+<li>API looks up or introspects permissions</li>
+<li>Revocation works at the next fresh check</li>
+<li>Delegation; the state service must be available</li>
+</ul>
+<p><strong>Sources</strong></p>
+<ul>
+<li>OWASP — <a href="https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html">Session Management</a></li>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc7662.html">Token Introspection, RFC 7662</a></li>
+</ul>
+<h3 id="other-tools-solve-different-identity-problems">Other tools solve different identity problems</h3>
+<h4 id="campus-single-sign-on">Campus single sign-on</h4>
+<p><strong>SAML:</strong> Security Assertion Markup Language.
+The provider sends signed <strong>XML</strong> (Extensible Markup Language).</p>
+<p>The app validates the assertion, then creates a session.
+Not a drop-in MCP access token.</p>
+<h4 id="service-access">Service access</h4>
+<p><strong>API key:</strong> an issued secret identifying a calling service.
+The API checks the key&#39;s record and permissions.</p>
+<p>Useful for service identity, not user sign-in or delegated consent.
+Protect and rotate the secret.</p>
+<h3 id="a-cookie-and-a-jwt-are-not-competing-formats">A cookie and a JWT are not competing formats</h3>
+<ul>
+<li>Browser to app: a <strong>session-ID cookie</strong>; the backend looks up the visit record</li>
+<li>Backend to API: a <strong>JWT access token</strong>; the API checks signature and permission</li>
+<li>A cookie carries a value; a JWT defines its format. They can work together</li>
+</ul>
+<pre><code class="language-shell">npm --prefix samples/oidc-web-app run demo
+</code></pre>
+<h3 id="how-a-signature-protects-readable-claims">How a signature protects readable claims</h3>
+<ul>
+<li>Encode header and payload as base64url, a URL-safe text encoding</li>
+<li>Sign <strong>encoded header + &quot;.&quot; + encoded payload</strong> with the issuer&#39;s private key</li>
+<li>Verify those exact bytes with the matching public key; it cannot mint tokens</li>
+<li>Change even one claim: the old signature no longer verifies</li>
+<li>Then check issuer, audience, time and permission; a valid signature is not enough</li>
+</ul>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Our RS256 format uses RSA (Rivest-Shamir-Adleman) signatures with SHA-256
+(Secure Hash Algorithm, 256-bit). Never place secrets in readable claims.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc7519.html">JSON Web Token, RFC 7519</a></li>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc8725.html">JWT Best Current Practices, RFC 8725</a></li>
+</ul>
+<h3 id="three-segments-and-one-pointer-that-matters">Three segments, and one pointer that matters</h3>
+<p><img src="../../assets/class-notes/week08-session-s49-1.svg" alt="A JWT drawn as three joined boxes: header, payload, signature, separated by dots. An arrow runs from the kid field in the header to a JWKS document fetched from the issuer, and from there to the signature box, showing that the key identified by kid verifies the signature over the header and payload."></p>
+<p><em>Trust starts with your configured issuer; kid selects a key only from that issuer&#39;s trusted key set</em></p>
+<h3 id="a-real-access-token-decoded">A real access token, decoded</h3>
+<pre><code class="language-console">header {&quot;alg&quot;:&quot;RS256&quot;,&quot;typ&quot;:&quot;at+jwt&quot;,&quot;kid&quot;:&quot;...&quot;}
+payload {
+  &quot;iss&quot;: &quot;http://127.0.0.1:9100&quot;,
+  &quot;sub&quot;: &quot;a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11&quot;,
+  &quot;aud&quot;: &quot;http://127.0.0.1:8930/mcp&quot;,
+  &quot;exp&quot;: 1786824533, &quot;iat&quot;: 1786823633,
+  &quot;scope&quot;: &quot;openid campuspulse.read&quot;,
+  &quot;roles&quot;: [&quot;viewer&quot;]
+}
+</code></pre>
+<blockquote>
+<p><strong>Note</strong></p>
+<p>Run <code>node validate-token.mjs --variant valid --decode-only</code> with the lab issuer.
+This abbreviated snapshot is expired; new tokens work locally and need redaction.</p>
+</blockquote>
+<h3 id="the-claims-that-decide-a-request">The claims that decide a request</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Claim</th><th>Means</th><th>Read by</th><th>If you skip it</th></tr></thead><tbody><tr><td><code>iss</code></td><td>who minted it</td><td>resource server</td><td>any issuer&#39;s token works</td></tr><tr><td><code>sub</code></td><td>subject id; key by (<code>iss</code>, <code>sub</code>)</td><td>your app</td><td>users from different issuers collide</td></tr><tr><td><code>aud</code></td><td>who it is <strong>for</strong></td><td>resource server</td><td>another API&#39;s token works here</td></tr><tr><td><code>exp</code> <code>nbf</code> <code>iat</code></td><td>expires / active after / issued at</td><td>resource server</td><td>stale or future tokens work</td></tr><tr><td><code>scope</code></td><td>what the <strong>app</strong> may do</td><td>resource server</td><td>no authorization at all</td></tr><tr><td><code>roles</code></td><td>what the <strong>user</strong> may do</td><td>your app</td><td>app and user rights conflated</td></tr></tbody></table></div>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc7519.html">RFC 7519 §4.1, Registered Claim Names</a></li>
+<li>Descope — <a href="https://www.descope.com/blog/post/noauth">nOAuth: an unverified <code>email</code> claim enabled account takeover</a></li>
+</ul>
+<h3 id="decoding-is-not-validation">Decoding is not validation</h3>
+<h3 id="decoding-shows-claims-not-truth">Decoding shows claims, not truth</h3>
+<h4 id="what-decoding-proves">What decoding proves</h4>
+<ul>
+<li>The string was base64url</li>
+<li>It parsed as JSON</li>
+</ul>
+<p>That is the complete list.</p>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p>Decoding is a display operation, not a security operation.</p>
+</blockquote>
+<h4 id="what-validation-proves">What validation proves</h4>
+<ol>
+<li><code>alg</code> is on <strong>your</strong> allow-list</li>
+<li><code>kid</code> resolves in the issuer&#39;s JWKS</li>
+<li>the <strong>signature</strong> verifies</li>
+<li><code>iss</code> matches exactly</li>
+<li><code>aud</code> names <strong>this</strong> server</li>
+<li><code>exp</code> has not passed, allowing bounded clock drift</li>
+<li><code>nbf</code> / <code>iat</code> are not in the future</li>
+<li><code>scope</code> covers this operation</li>
+</ol>
+<h3 id="follow-along-decode-then-forge">Follow along: decode, then forge</h3>
+<h4 id="steps-1">Steps</h4>
+<ol>
+<li>Node <strong>24 LTS</strong>; course root = <code>instructor</code> in the master, or the student download root</li>
+<li><strong>A</strong>: the local lab issuer — it mints and serves the JWKS</li>
+<li><strong>B</strong>: decode, forge, check. Ctrl+C in Terminal A after</li>
+</ol>
+<h4 id="expected-observations-1">Expected observations</h4>
+<ul>
+<li>Valid token: eight PASS, then ACCEPT 200</li>
+<li>Forged token: signature check fails</li>
+</ul>
+<h4 id="fallback-1">Fallback</h4>
+<p>Use the negative-battery fallback.</p>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="lab.html">Week 8 lab, Part 3</a></li>
+<li>Course — <a href="samples/validate-token.mjs">the hand-written validator</a></li>
+<li>Course — <a href="samples/index.html">All server/client commands and expected exit codes</a></li>
+</ul>
+<h3 id="terminal-a-start-the-lab-issuer">Terminal A: start the lab issuer</h3>
+<pre><code class="language-powershell">cd weeks\week08\samples
+node authz-server.mjs
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Expect the issuer, JWKS URL, and active key ID on port 9100. Reuse your issuer if already running.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/authz-server.mjs">lab authorization server</a></li>
+</ul>
+<h3 id="macos-start-the-lab-issuer">macOS: start the lab issuer</h3>
+<pre><code class="language-bash">cd weeks/week08/samples
+node authz-server.mjs
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Expect the issuer, JWKS URL, and active key ID on port 9100. Reuse your issuer if already running.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/authz-server.mjs">lab authorization server</a></li>
+</ul>
+<h3 id="terminal-b-decode-then-validate">Terminal B: decode, then validate</h3>
+<pre><code class="language-powershell">cd weeks\week08\samples
+node validate-token.mjs --variant valid --decode-only
+
+node validate-token.mjs --variant valid --scope campuspulse.read
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Two newly minted tokens of the same variant. Only validation makes a security
+claim; decoding just displays fields.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/validate-token.mjs">the hand-written validator</a></li>
+</ul>
+<h3 id="macos-decode-then-validate">macOS: decode, then validate</h3>
+<pre><code class="language-bash">cd weeks/week08/samples
+node validate-token.mjs --variant valid --decode-only
+
+node validate-token.mjs --variant valid --scope campuspulse.read
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Two newly minted tokens of the same variant. Only validation makes a security
+claim; decoding just displays fields.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/validate-token.mjs">the hand-written validator</a></li>
+</ul>
+<h3 id="change-one-claim-keep-the-signature">Change one claim, keep the signature</h3>
+<pre><code class="language-powershell">node tamper.mjs                       # writes out\forged.txt
+
+node validate-token.mjs --token-file out\forged.txt `
+  --scope campuspulse.incident.write
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>It rewrites <code>roles</code> to <code>[&quot;operator&quot;]</code>, adds the write scope, and touches nothing else.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/tamper.mjs">tamper.mjs</a></li>
+</ul>
+<h3 id="macos-change-one-claim">macOS: change one claim</h3>
+<pre><code class="language-bash">node tamper.mjs                     # writes out/forged.txt
+
+node validate-token.mjs --token-file out/forged.txt \
+  --scope campuspulse.incident.write
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>It rewrites <code>roles</code> to <code>[&quot;operator&quot;]</code>, adds the write scope, and touches nothing else.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/tamper.mjs">tamper.mjs</a></li>
+</ul>
+<h3 id="eight-checks-before-acceptance">Eight checks before acceptance</h3>
+<pre><code class="language-console">PASS  alg is on the allow-list           allowed=RS256
+PASS  kid resolves in JWKS
+PASS  signature verifies
+PASS  iss matches configured issuer
+PASS  aud contains this resource server
+PASS  exp is in the future
+PASS  nbf/iat are not in the future
+PASS  scope includes campuspulse.read
+ACCEPT 200
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>After parsing: seven credential checks, then the permission check.
+The teaching validator displays every check, even after a failure.</p>
+</blockquote>
+<h3 id="a-perfectly-valid-token-correctly-rejected">A perfectly valid token, correctly rejected</h3>
+<pre><code class="language-console">PASS  signature verifies
+PASS  iss matches configured issuer
+FAIL  aud contains this resource server
+      token:    https://grades.campuspulse.example/api
+      expected: http://127.0.0.1:8930/mcp
+REJECT 401: audience mismatch
+</code></pre>
+<blockquote>
+<p><strong>Failure to avoid</strong></p>
+<p>Nothing was forged. This lab token is signed correctly, but for a different
+service. A genuine library pass is not a server-room pass.</p>
+</blockquote>
+<h3 id="expired-token-or-unknown-key">Expired token or unknown key?</h3>
+<pre><code class="language-console">--variant expired
+  PASS  signature verifies
+  FAIL  exp is in the future    delta=-2400s, skew=60s
+  REJECT 401: token expired
+--variant stale-kid
+  FAIL  kid resolves in JWKS    kid=retired-2025-key
+  REJECT 401: unknown signing key
+</code></pre>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p>Both are 401. Logs distinguish expired credentials from an unknown signing key;
+an unknown key can signal a stale cache or an untrusted token.</p>
+</blockquote>
+<h3 id="an-id-token-presented-to-an-api">An ID token presented to an API</h3>
+<pre><code class="language-console">header  {&quot;alg&quot;:&quot;RS256&quot;,&quot;typ&quot;:&quot;JWT&quot;,&quot;kid&quot;:&quot;...&quot;}
+payload { &quot;aud&quot;:&quot;campuspulse-web&quot;, &quot;nonce&quot;:&quot;n-0S6_WzA2Mj&quot;, ... }
+PASS  signature verifies
+FAIL  aud contains this resource server
+      The audience is the CLIENT, not the API.
+FAIL  scope includes campuspulse.read    granted=[]
+REJECT 401: audience mismatch
+</code></pre>
+<blockquote>
+<p><strong>Failure to avoid</strong></p>
+<p>This genuine identity token is <strong>not an API credential</strong>. Audience and token
+purpose decide that, not whether the payload looks like a user profile.</p>
+</blockquote>
+<h3 id="the-negative-battery-in-one-loop">The negative battery, in one loop</h3>
+<pre><code class="language-powershell">foreach ($v in &#39;expired&#39;,&#39;wrong-issuer&#39;,&#39;wrong-audience&#39;,
+               &#39;no-scope&#39;,&#39;id-token&#39;,&#39;stale-kid&#39;) {
+  &quot;===== $v =====&quot;
+  node validate-token.mjs --variant $v --scope campuspulse.read
+}
+Get-Content .\transcripts\part3-negatives.txt   # fallback capture
+if (Test-Path .\out\forged.txt) {
+  Remove-Item -LiteralPath .\out\forged.txt
+} # Ctrl+C in Terminal A
+</code></pre>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/transcripts/part3-negatives.txt">captured negative battery</a></li>
+</ul>
+<h3 id="macos-the-negative-battery">macOS: the negative battery</h3>
+<pre><code class="language-bash">for v in expired wrong-issuer wrong-audience \
+         no-scope id-token stale-kid; do
+  printf &#39;===== %s =====\n&#39; &quot;$v&quot;
+  node validate-token.mjs --variant &quot;$v&quot; --scope campuspulse.read
+done
+head -n 60 ./transcripts/part3-negatives.txt   # fallback capture
+rm -f ./out/forged.txt                         # cleanup; Ctrl+C in A
+</code></pre>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/transcripts/part3-negatives.txt">captured negative battery</a></li>
+</ul>
+<h3 id="which-check-fired-first">Which check fired first</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Variant</th><th>First failing check</th><th>Status</th></tr></thead><tbody><tr><td><code>expired</code></td><td><code>exp</code> is in the future</td><td><strong>401</strong></td></tr><tr><td><code>wrong-issuer</code></td><td><code>iss</code> matches configured issuer</td><td><strong>401</strong></td></tr><tr><td><code>wrong-audience</code></td><td><code>aud</code> contains this resource</td><td><strong>401</strong></td></tr><tr><td><code>no-scope</code></td><td><code>scope</code> includes the required one</td><td><strong>403</strong></td></tr><tr><td><code>id-token</code></td><td><code>aud</code> contains this resource</td><td><strong>401</strong></td></tr><tr><td><code>stale-kid</code></td><td><code>kid</code> resolves in JWKS</td><td><strong>401</strong></td></tr></tbody></table></div>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc6750.html">RFC 6750 §3, the <code>WWW-Authenticate</code> challenge</a></li>
+<li>Course — <a href="samples/transcripts/part3-negatives.txt">captured negative battery</a></li>
+</ul>
+<h3 id="when-the-attacker-picks-alg-none">When the attacker picks <code>alg: none</code></h3>
+<h4 id="token-header">Token header</h4>
+<pre><code class="language-json">{
+  &quot;alg&quot;: &quot;none&quot;,
+  &quot;typ&quot;: &quot;JWT&quot;
+}
+</code></pre>
+<h4 id="failure-mode">Failure mode</h4>
+<ul>
+<li>Once treated as &quot;verified with no key&quot;</li>
+<li>Payload fully attacker-controlled</li>
+<li>No signature to check</li>
+</ul>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>The token must not choose how it is verified. Run the local regression examples
+with <code>node --test identity.test.mjs</code> from <code>weeks/week08/samples</code>; they start and stop their own servers.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Auth0 — <a href="https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/">Critical vulnerabilities in JSON Web Token libraries</a></li>
+<li>OWASP — <a href="https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_Cheat_Sheet.html">JSON Web Token Cheat Sheet</a></li>
+</ul>
+<h3 id="a-public-key-is-not-a-shared-secret">A public key is not a shared secret</h3>
+<ul>
+<li><strong>HMAC:</strong> Hash-based Message Authentication Code; one shared secret</li>
+<li>HS256 uses HMAC with SHA-256; RS256 uses a private/public key pair</li>
+<li>The bug: verify an HS256 token using the published RSA public key as a secret</li>
+<li>The attacker knows that &quot;secret&quot; and can forge tokens</li>
+<li>Fix: allow only <code>algorithms: [&#39;RS256&#39;]</code> for this issuer</li>
+</ul>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p><code>kid</code> picks only the key; never the algorithm.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>NIST NVD — <a href="https://nvd.nist.gov/vuln/detail/CVE-2015-9235">CVE-2015-9235</a> (RS→HS confusion)</li>
+</ul>
+<h3 id="what-your-validator-must-not-do">What your validator must not do</h3>
+<ul>
+<li>Do <strong>not</strong> trust <code>header.alg</code> — allow-list the algorithms in your config</li>
+<li>Do <strong>not</strong> fetch a key from a URL named inside the token (<code>jku</code>, <code>x5u</code>)</li>
+<li>Do <strong>not</strong> select a JWKS key by array index — select by <code>kid</code></li>
+<li>Do <strong>not</strong> compare <code>iss</code> with normalisation — <strong>exact string</strong>, per RFC 9207</li>
+<li>Do <strong>not</strong> treat a missing <code>aud</code> as &quot;must be for me&quot;</li>
+<li>Do <strong>not</strong> set clock skew above ~60 seconds to make a flaky test pass</li>
+</ul>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p>Every one of these makes tokens work. Several of them make <em>forged</em> tokens work
+too, and none of them produce an error message.</p>
+</blockquote>
+<h3 id="what-you-actually-write-in-production">What you actually write in production</h3>
+<ul>
+<li>Use a maintained library; this course&#39;s Node reference uses <code>jose</code></li>
+<li>Configure it with <strong>your</strong> issuer, <strong>your</strong> audience, <strong>your</strong> algorithm list</li>
+<li>Cache keys with a time to live (TTL); rate-limit refreshes on unknown <code>kid</code></li>
+<li>Return <strong>401</strong> for authentication failures, <strong>403</strong> for authorization failures</li>
+<li>Log the <strong>failed check name</strong> and token identifier (<code>jti</code>) — never the token</li>
+<li>Sender binding can require a key too; it is separate from choosing JWT or opaque</li>
+</ul>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Keep the hand-written validator for learning. Use the maintained-library
+browser/server integration for your application.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc6750.html">RFC 6750 §3, the <code>WWW-Authenticate</code> challenge</a></li>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9449.html">RFC 9449, DPoP — sender-constrained tokens</a></li>
+</ul>
+<h3 id="beyond-bearer-require-the-callers-key-too">Beyond bearer: require the caller&#39;s key too</h3>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>These constrain who may present a token. Neither replaces JWT or opaque
+formats. Conceptual extension, not an additional classroom demo.</p>
+</blockquote>
+<h4 id="dpop">DPoP</h4>
+<p><strong>Demonstrating Proof of Possession.</strong>
+The client signs a proof for each request.
+A token bound to that key cannot be used with the token alone.</p>
+<h4 id="mtls">mTLS</h4>
+<p><strong>Mutual Transport Layer Security.</strong>
+The client authenticates with a certificate during the encrypted connection.
+The resource enforces the token&#39;s certificate binding.</p>
+<h3 id="four-tokens-arrive-at-your-mcp-server-which-status-and-which-check-decided">Four tokens arrive at your MCP server. Which status, and which check decided?</h3>
+<ol>
+<li>Signature valid · <code>iss</code> correct · <code>aud</code> = your <strong>web API</strong> · <code>exp</code> in 12 min</li>
+<li>Signature valid · <code>aud</code> correct · <code>scope</code> = <code>openid profile</code> · no <code>campuspulse.*</code></li>
+<li><code>alg: none</code> · payload says <code>&quot;roles&quot;:[&quot;operator&quot;]</code> · no signature segment</li>
+<li>Signature valid · everything correct · <code>exp</code> was 90 seconds ago, skew is 60s</li>
+</ol>
+<h2 id="block-c--sessions-and-mcp-auth">Block C — Sessions and MCP auth</h2>
+<h3 id="sessions-authorization-decisions-and-mcp-auth">Sessions, authorization decisions, and MCP auth</h3>
+<p>Where the token lives, where the decision belongs, and what OAuth looks like in front of the server you built last week</p>
+<p>Block B ended with a token you can trust. <strong>Now: where does it live, and who decides what it may do?</strong></p>
+<h3 id="the-browser-session-vocabulary">The browser-session vocabulary</h3>
+<h4 id="application-pieces">Application pieces</h4>
+<ul>
+<li><strong>SPA:</strong> Single-Page Application; browser JavaScript renders the interface</li>
+<li><strong>BFF:</strong> Backend-for-Frontend; a server handling identity and API calls for the browser</li>
+<li><strong>Session / cookie:</strong> server&#39;s visit record / browser-stored value sent with requests</li>
+</ul>
+<h4 id="boundaries-to-protect">Boundaries to protect</h4>
+<ul>
+<li><strong>XSS:</strong> Cross-Site Scripting; unwanted code running in your page</li>
+<li><strong>CSRF:</strong> Cross-Site Request Forgery; another site inducing a request with your cookies</li>
+<li><strong>MCP / AS:</strong> Model Context Protocol / authorization server</li>
+</ul>
+<h3 id="fictional-campuspulse-case-a-visible-tool-can-still-be-denied">Fictional CampusPulse case: a visible tool can still be denied</h3>
+<h4 id="maya-is-a-viewer">Maya is a viewer</h4>
+<ul>
+<li>Her client has <code>campuspulse.read</code></li>
+<li>The host can still discover <code>post_incident_update</code></li>
+<li>A model chooses that tool after she asks for a summary</li>
+</ul>
+<h4 id="the-server-owns-the-decision">The server owns the decision</h4>
+<ul>
+<li>Required scope is <code>campuspulse.incident.write</code></li>
+<li>Object policy also requires the operator role</li>
+<li>The server returns 403 and audits actor, tool, object, and reason</li>
+</ul>
+<h3 id="scopes-and-roles-answer-different-questions">Scopes and roles answer different questions</h3>
+<h4 id="scope--what-the-app-may-do">Scope — what the <strong>app</strong> may do</h4>
+<ul>
+<li>Requested by the client, granted by <strong>authorization-server policy</strong></li>
+<li>Lives in the token: <code>scope: &quot;campuspulse.read&quot;</code></li>
+<li>Bounds the client, not the human</li>
+<li>Coarse by design — a handful, not hundreds</li>
+</ul>
+<h4 id="role--what-the-user-may-do">Role — what the <strong>user</strong> may do</h4>
+<ul>
+<li>Assigned out of band, by an admin or a group</li>
+<li>Lives in <code>roles</code>, or in your database</li>
+<li>Bounds the human, not the client</li>
+</ul>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>The effective permission is the <strong>intersection</strong> — an operator on a read-only
+client still may not post.</p>
+</blockquote>
+<h3 id="roles-attributes-and-where-to-check-them">Roles, attributes, and where to check them</h3>
+<ul>
+<li><strong>Role-Based Access Control (RBAC):</strong> is the user an operator?</li>
+<li><strong>Attribute-Based Access Control (ABAC):</strong> assigned to this incident?</li>
+<li>Client checks help the interface, but an attacker can skip them</li>
+<li>Gateway checks control entry</li>
+<li>Resource-server checks protect the data and individual objects</li>
+</ul>
+<blockquote>
+<p><strong>Failure to avoid</strong></p>
+<p>A hidden React button improves the user experience; it is not a permission
+check. The server must also reject a request typed directly into a terminal.</p>
+</blockquote>
+<h3 id="where-does-the-browser-keep-the-token">Where does the browser keep the token?</h3>
+<h4 id="token-in-the-spa">Token in the SPA</h4>
+<ul>
+<li><code>localStorage</code> — any script can read it</li>
+<li>In-memory — gone on refresh</li>
+<li>XSS can read tokens and make requests as the user</li>
+</ul>
+<h4 id="backend-for-frontend">Backend-for-Frontend</h4>
+<ul>
+<li>Tokens live <strong>server-side</strong></li>
+<li>Browser gets a random session-ID cookie, not the token</li>
+<li>Local logout deletes the server&#39;s session record</li>
+</ul>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>HttpOnly blocks cookie reading, not requests. A BFF reduces token theft,
+but does not make XSS harmless.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>OWASP — <a href="https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html">Session Management Cheat Sheet</a></li>
+<li>MDN — <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie"><code>Set-Cookie</code> and its attributes</a></li>
+</ul>
+<h3 id="what-the-cookie-settings-actually-do">What the cookie settings actually do</h3>
+<ul>
+<li><strong>HttpOnly:</strong> page scripts cannot read the cookie</li>
+<li><strong>Secure:</strong> send only over encrypted HTTPS</li>
+<li><strong>SameSite=Lax:</strong> restrict cross-site sending; still use CSRF checks</li>
+<li>Sign in, reload, then sign out: the session survives reload but not local logout</li>
+</ul>
+<pre><code class="language-shell">npm --prefix samples/oidc-web-app run demo
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Block A&#39;s launcher starts client backend, provider and resource together.
+Its HTTP loopback mode uses a separate development cookie, never a production setting.</p>
+</blockquote>
+<h3 id="refresh-revoke-log-out--three-different-things">Refresh, revoke, log out — three different things</h3>
+<ul>
+<li><strong>Refresh:</strong> exchange a refresh token for a new access token, ahead of <code>exp</code></li>
+<li><strong>Rotation:</strong> each refresh returns a <em>new</em> refresh token; the old one dies<ul>
+<li>Reuse can mean theft or a retry race; our provider <strong>revokes the family</strong></li>
+</ul>
+</li>
+<li><strong>Revocation:</strong> RFC 7009 <code>/revoke</code> invalidates the token you present, and the AS <em>may</em> revoke related grants</li>
+<li><strong>Logout:</strong> end your app&#39;s session; provider sign-out is a separate step</li>
+</ul>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p>A JWT checked only offline can remain accepted until <code>exp</code> (plus clock tolerance).
+Earlier refusal needs a revocation check or policy lookup. Deleting the browser
+cookie alone does not revoke a copied token.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc7009.html">RFC 7009, Token Revocation</a></li>
+<li>OpenID Foundation — <a href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html">RP-Initiated Logout</a></li>
+</ul>
+<h3 id="six-failures-and-what-catches-each">Six failures, and what catches each</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Failure</th><th>Symptom</th><th>Evidence that finds it</th></tr></thead><tbody><tr><td>Wrong audience</td><td>works, too widely</td><td>present another API&#39;s token → 401</td></tr><tr><td>Wrong issuer</td><td>accepts the wrong tenant</td><td>signed <code>wrong-issuer</code> variant → 401</td></tr><tr><td>Over-broad scope</td><td>one scope, every tool</td><td>scope-to-tool table + a denied call</td></tr><tr><td><strong>ID token as API token</strong></td><td>works, no <code>scope</code> exists</td><td>present the ID token → 401</td></tr><tr><td>Missing PKCE</td><td>login works perfectly</td><td>wrong verifier → <code>invalid_grant</code></td></tr><tr><td>Token in the URL</td><td>may leak through history/logs</td><td>HTTP Archive (HAR): <code>?access_token=</code> or <code>Referer</code></td></tr></tbody></table></div>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9700.html">RFC 9700, OAuth 2.0 Security Best Current Practice</a></li>
+</ul>
+<h3 id="authorizing-the-mcp-server-you-built-last-week">Authorizing the MCP server you built last week</h3>
+<h3 id="mcp-does-not-invent-an-auth-model-it-profiles-one">MCP does not invent an auth model. It profiles one.</h3>
+<ul>
+<li>An HTTP MCP server using authorization follows an <strong>OAuth resource-server</strong> profile</li>
+<li>It <strong>MUST</strong> publish protected-resource metadata (RFC 9728)</li>
+<li>Clients <strong>MUST</strong> use Authorization Code + <strong>PKCE</strong>, and <strong>MUST</strong> send <code>resource</code> (RFC 8707)</li>
+<li>Servers <strong>MUST</strong> only accept tokens whose audience is themselves</li>
+<li>Servers <strong>MUST NOT</strong> accept or forward any other token — no passthrough</li>
+<li><code>stdio</code> servers are excluded: they take credentials from the environment</li>
+</ul>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Every requirement above is something you already did in Blocks A and B. The MCP
+specification&#39;s contribution is making the discovery step mandatory so a client
+can find its way in without configuration.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>MCP — <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization">Authorization, specification 2026-07-28</a></li>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9728.html">RFC 9728, Protected Resource Metadata</a></li>
+</ul>
+<h3 id="what-you-are-adding-to-last-weeks-system">What you are adding to last week&#39;s system</h3>
+<p><img src="../../assets/class-notes/week08-session-s85-1.svg" alt="Architecture diagram. An MCP host and client on the left send requests to an authorization proxy on port 8930, which validates tokens against a JWKS from the authorization server on port 9100 and forwards allowed calls to the Week 7 MCP server on port 8931. The proxy publishes protected resource metadata and emits an audit log."></p>
+<p><em>One process added in front of the Week 7 server. The MCP server itself does not change.</em></p>
+<h3 id="follow-along-401--403--200">Follow along: 401 → 403 → 200</h3>
+<h4 id="steps-2">Steps</h4>
+<ol>
+<li>Node 24 LTS; course root = <code>instructor</code> in the master, or student download root</li>
+<li><strong>A</strong> <code>:9100</code> issuer · <strong>B</strong> <code>:8930</code> proxy · <strong>C</strong> <code>:8931</code> server</li>
+<li><strong>D</strong> runs calls. Stop A, B, C with Ctrl+C</li>
+</ol>
+<h4 id="expected-observations-2">Expected observations</h4>
+<ul>
+<li>No token: 401 with metadata pointer</li>
+<li>Viewer write: 403; operator write: 200</li>
+</ul>
+<h4 id="fallback-2">Fallback</h4>
+<p>Use the captured-walk fallback.</p>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="lab.html">Week 8 lab, Parts 0 and 5</a></li>
+<li>Course — <a href="samples/mcp-auth-proxy.mjs">authorization proxy</a></li>
+<li>Course — <a href="samples/index.html">Every server/client command and recovery step</a></li>
+</ul>
+<h3 id="terminals-a-and-b-issuer-and-proxy">Terminals A and B: issuer and proxy</h3>
+<pre><code class="language-powershell"># A:
+cd weeks\week08\samples
+$env:PORT=&#39;9100&#39;; node authz-server.mjs
+# B:
+cd weeks\week08\samples
+$env:MCP_UPSTREAM=&#39;http://127.0.0.1:8931/mcp&#39;
+$env:PORT=&#39;8930&#39;; node mcp-auth-proxy.mjs
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Reuse your lab issuer if already running. Keep A and B open, then start C.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="lab.html">Week 8 lab, Part 0</a></li>
+</ul>
+<h3 id="macos-issuer-and-proxy">macOS: issuer and proxy</h3>
+<pre><code class="language-bash"># A:
+cd weeks/week08/samples
+PORT=9100 node authz-server.mjs
+# B:
+cd weeks/week08/samples
+PORT=8930 MCP_UPSTREAM=http://127.0.0.1:8931/mcp node mcp-auth-proxy.mjs
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p><code>:8930</code> prints its policy table. Reuse a running issuer; keep A and B open, then start C.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="lab.html">Week 8 lab, Part 0</a></li>
+</ul>
+<h3 id="terminal-c-a-memory-only-backend">Terminal C: a memory-only backend</h3>
+<pre><code class="language-powershell">cd samples\mcp-starter
+npm ci                      # before class
+npm run build               # before class
+$env:MCP_HOST=&#39;127.0.0.1&#39;; $env:PORT=&#39;8931&#39;
+$env:DATABASE_URL=$null
+npm run start:http
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Expect <code>store=memory</code> and &quot;NO AUTHORIZATION&quot;. Only the proxy adds the authorization boundary.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="../../samples/mcp-starter/index.html">starter quick start</a></li>
+</ul>
+<h3 id="macos-a-memory-only-backend">macOS: a memory-only backend</h3>
+<pre><code class="language-bash">cd samples/mcp-starter
+npm ci                      # before class
+npm run build               # before class
+MCP_HOST=127.0.0.1 PORT=8931 env -u DATABASE_URL npm run start:http
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p><code>env -u DATABASE_URL</code> guarantees <code>store=memory</code>, so the operator&#39;s write stays synthetic.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="../../samples/mcp-starter/index.html">starter quick start</a></li>
+</ul>
+<h3 id="terminal-d-refusal-and-discovery">Terminal D: refusal and discovery</h3>
+<pre><code class="language-powershell">cd weeks\week08\samples
+$proxy = &#39;http://127.0.0.1:8930&#39;
+curl.exe --noproxy &#39;*&#39; -sS -i --max-time 10 &quot;$proxy/mcp&quot; -d &quot;{}&quot; `
+  -H &quot;content-type: application/json&quot; -H &quot;Mcp-Method: tools/call&quot; `
+  -H &quot;Mcp-Name: post_incident_update&quot; `
+  -H &quot;Mcp-Protocol-Version: 2026-07-28&quot;
+curl.exe --noproxy &#39;*&#39; -sS --max-time 10 `
+  &quot;$proxy/.well-known/oauth-protected-resource&quot;
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Expect <code>401</code> with <code>WWW-Authenticate</code>: a metadata URL and scope <code>campuspulse.incident.write</code>.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9728.html">RFC 9728, Protected Resource Metadata</a></li>
+</ul>
+<h3 id="macos-refusal-and-discovery">macOS: refusal and discovery</h3>
+<pre><code class="language-bash">cd weeks/week08/samples
+PROXY=http://127.0.0.1:8930
+curl -sS -i --noproxy &#39;*&#39; --max-time 10 &quot;$PROXY/mcp&quot; -d &#39;{}&#39; \
+  -H &quot;content-type: application/json&quot; -H &quot;Mcp-Method: tools/call&quot; \
+  -H &quot;Mcp-Name: post_incident_update&quot; \
+  -H &quot;Mcp-Protocol-Version: 2026-07-28&quot;
+curl -sS --noproxy &#39;*&#39; --max-time 10 \
+  &quot;$PROXY/.well-known/oauth-protected-resource&quot;
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Expect 401 plus a <code>WWW-Authenticate</code> naming the metadata URL and the write scope.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>IETF — <a href="https://www.rfc-editor.org/rfc/rfc9728.html">RFC 9728, Protected Resource Metadata</a></li>
+</ul>
+<h3 id="terminal-d-three-authenticated-calls">Terminal D: three authenticated calls</h3>
+<pre><code class="language-powershell">node mcp-client-walk.mjs
+node mcp-client-walk.mjs --tool post_incident_update
+node mcp-client-walk.mjs --tool post_incident_update `
+  --login-as operator
+node mcp-client-walk.mjs --tool get_incident
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Read the incident again: the operator&#39;s fixed classroom update is public and
+visible. Viewer write is denied. HTTP 200 with a tool error is not success.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/mcp-client-walk.mjs">local MCP authorization walk</a></li>
+<li>Course — <a href="provider-integration.html">real-provider integration and limits</a></li>
+</ul>
+<h3 id="macos-three-authenticated-calls">macOS: three authenticated calls</h3>
+<pre><code class="language-bash">node mcp-client-walk.mjs
+node mcp-client-walk.mjs --tool post_incident_update
+node mcp-client-walk.mjs --tool post_incident_update \
+  --login-as operator
+node mcp-client-walk.mjs --tool get_incident
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>401 → 403 → 200. Read the incident again to see the fixed synthetic update;
+the launcher commands keep all writes in memory.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/mcp-client-walk.mjs">local MCP authorization walk</a></li>
+</ul>
+<h3 id="one-missing-token-three-authenticated-cases">One missing token, three authenticated cases</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Run</th><th>Status</th><th>What decided it</th></tr></thead><tbody><tr><td>No token at all</td><td><strong>401</strong></td><td>No credential; challenge carries <code>resource_metadata</code></td></tr><tr><td>Viewer, read tool</td><td><strong>200</strong></td><td>Granted scope covers <code>campuspulse.read</code></td></tr><tr><td>Viewer, write tool</td><td><strong>403</strong></td><td>Tenant <strong>refused to grant</strong> the write scope</td></tr><tr><td>Operator, write tool</td><td><strong>200</strong></td><td>Scope granted <strong>and</strong> the <code>operator</code> role matched</td></tr><tr><td>Any of the four</td><td>—</td><td>None of them proves 8931 is protected</td></tr></tbody></table></div>
+<p><strong>Sources</strong></p>
+<ul>
+<li>MCP — <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization">Authorization, specification 2026-07-28</a></li>
+<li>Course — <a href="samples/transcripts/part5-viewer-write-denied.txt">captured walks</a></li>
+</ul>
+<h3 id="the-handshake-starts-with-a-refusal">The handshake starts with a refusal</h3>
+<pre><code class="language-console">[1] tools/call list_service_status, no token
+    HTTP 401; challenge names resource_metadata and scope
+[2] GET http://127.0.0.1:8930/.well-known/oauth-protected-resource
+{
+  &quot;resource&quot;: &quot;http://127.0.0.1:8930/mcp&quot;,
+  &quot;authorization_servers&quot;: [&quot;http://127.0.0.1:9100&quot;],
+  &quot;scopes_supported&quot;: [&quot;campuspulse.read&quot;, &quot;campuspulse.incident.write&quot;],
+  &quot;bearer_methods_supported&quot;: [&quot;header&quot;]
+}
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>The 401 is the discovery starting point here: follow its protected-resource
+metadata (PRM) URL. Clients can also discover metadata via well-known paths.</p>
+</blockquote>
+<h3 id="per-tool-scope-decided-without-parsing-the-body">Per-tool scope, decided without parsing the body</h3>
+<pre><code class="language-console">Mcp-Method: tools/call
+Mcp-Name: post_incident_update    # body must agree
+Mcp-Protocol-Version: 2026-07-28
+
+# Tool scope policy (writes also require operator role):
+list_service_status   -&gt; campuspulse.read
+get_incident          -&gt; campuspulse.read
+draft_incident_update -&gt; campuspulse.read
+post_incident_update  -&gt; campuspulse.incident.write
+everything else       -&gt; deny by default
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Header routing lets an intermediary route and rate-limit an MCP call <strong>without</strong>
+parsing JSON-RPC, and stops a caller showing the proxy one target while the
+server runs another. A careful proxy still parses the body to confirm they agree.</p>
+</blockquote>
+<h3 id="the-same-call-one-credential-apart">The same call, one credential apart</h3>
+<pre><code class="language-console"># as a VIEWER — the tenant refused to grant the write scope at all
+    scope         openid
+[7] tools/call post_incident_update WITH the access token
+    HTTP 403
+    WWW-Authenticate: Bearer error=&quot;insufficient_scope&quot;,
+      scope=&quot;campuspulse.incident.write&quot;,
+      resource_metadata=&quot;http://127.0.0.1:8930/.well-known/…&quot;
+
+# as an OPERATOR — same client, same tool, same server
+    scope         openid campuspulse.incident.write
+[7] HTTP 200  {&quot;result&quot;:{&quot;content&quot;:[{&quot;type&quot;:&quot;text&quot;, …
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>401 → 403 → 200. Three different answers to the same request, and the only
+variable is the credential. That progression separates authentication from authorization.</p>
+</blockquote>
+<h3 id="where-week-7-and-week-8-actually-collide">Where Week 7 and Week 8 actually collide</h3>
+<pre><code class="language-console">t+  0s  stream opened: HTTP 200 text/event-stream
+t+  0s  open        {&quot;exp&quot;:1786824030,&quot;expires_in&quot;:6,&quot;enforcing&quot;:false}
+t+  2s  heartbeat   {&quot;n&quot;:1,&quot;token_expires_in&quot;:4,&quot;still_streaming&quot;:true}
+t+  6s  heartbeat   {&quot;n&quot;:3,&quot;token_expires_in&quot;:0,&quot;still_streaming&quot;:true}
+t+  8s  heartbeat   {&quot;n&quot;:4,&quot;token_expires_in&quot;:-2,&quot;still_streaming&quot;:true}
+t+ 12s  heartbeat   {&quot;n&quot;:6,&quot;token_expires_in&quot;:-7,&quot;still_streaming&quot;:true}
+
+# with ENFORCE_STREAM_EXPIRY=1:
+t+  8s  token_expired  {&quot;error&quot;:&quot;invalid_token&quot;,
+                        &quot;error_description&quot;:&quot;re-authorize and reconnect&quot;}
+</code></pre>
+<blockquote>
+<p><strong>Failure to avoid</strong></p>
+<p>A <code>subscriptions/listen</code> stream takes <strong>one</strong> authorization decision, at open.
+An access token lives fifteen minutes. Minute 47 of that stream is serving data
+to a credential that expired half an hour ago — and your audit log&#39;s last entry
+still says <code>allow</code>.</p>
+</blockquote>
+<h3 id="terminal-b-choose-one-stream-mode">Terminal B: choose one stream mode</h3>
+<pre><code class="language-powershell"># Stop your proxy with Ctrl+C; run the bug mode:
+$env:ENFORCE_STREAM_EXPIRY=&#39;0&#39;; node mcp-auth-proxy.mjs
+# AFTER Terminal D&#39;s bug run: Ctrl+C here, then:
+$env:ENFORCE_STREAM_EXPIRY=&#39;1&#39;; node mcp-auth-proxy.mjs
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Each server command blocks. Do not paste both starts together. Keep issuer A
+running; use D for the client while B holds the selected mode.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/transcripts/part6-expiry-bug.txt">captured bug run</a></li>
+<li>Course — <a href="samples/transcripts/part6-expiry-enforced.txt">captured enforced run</a></li>
+</ul>
+<h3 id="terminal-d-measure-both-stream-modes">Terminal D: measure both stream modes</h3>
+<pre><code class="language-powershell"># While B is in bug mode:
+node expiry-mid-connection.mjs --ttl 6 --watch 14
+# Switch B to enforced mode, then:
+node expiry-mid-connection.mjs --ttl 8 --watch 22
+Get-Content .\transcripts\part6-expiry-bug.txt
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Bug: heartbeats continue past expiry. Fix: token_expired and stream CLOSED.
+This is a synthetic Server-Sent Events (SSE) stream, not a full MCP subscription.
+Stop your A/B/C servers with Ctrl+C afterward.</p>
+</blockquote>
+<h3 id="macos-b-choose-one-stream-mode">macOS B: choose one stream mode</h3>
+<pre><code class="language-bash"># B: Ctrl+C, then restart the proxy with enforcement OFF
+ENFORCE_STREAM_EXPIRY=0 \
+  MCP_UPSTREAM=http://127.0.0.1:8931/mcp node mcp-auth-proxy.mjs
+# B: Ctrl+C, then restart it enforced
+ENFORCE_STREAM_EXPIRY=1 \
+  MCP_UPSTREAM=http://127.0.0.1:8931/mcp node mcp-auth-proxy.mjs
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>Run only one server command at a time. Use the next slide in D while B is
+running. After both measurements, Ctrl+C in your A, B and C windows.</p>
+</blockquote>
+<p><strong>Sources</strong></p>
+<ul>
+<li>Course — <a href="samples/transcripts/part6-expiry-bug.txt">captured bug run</a></li>
+<li>Course — <a href="samples/transcripts/part6-expiry-enforced.txt">captured enforced run</a></li>
+</ul>
+<h3 id="macos-terminal-d-measure-both-stream-modes">macOS Terminal D: measure both stream modes</h3>
+<pre><code class="language-bash"># While B is in bug mode:
+node expiry-mid-connection.mjs --ttl 6 --watch 14
+# Switch B to enforced mode, then:
+node expiry-mid-connection.mjs --ttl 8 --watch 22
+head -n 40 ./transcripts/part6-expiry-bug.txt
+</code></pre>
+<blockquote>
+<p><strong>Key idea</strong></p>
+<p>The first stream outlives its credential; the second emits token_expired and
+closes. This synthetic Server-Sent Events (SSE) test needs the issuer and proxy.</p>
+</blockquote>
+<h3 id="your-mcp-server-has-four-tools-write-the-policy-table--and-defend-two-rows">Your MCP server has four tools. Write the policy table — and defend two rows.</h3>
+<ol>
+<li><code>list_service_status</code> (read) · <code>get_incident</code> (read) · <code>post_incident_update</code> (writes) · <code>delete_incident</code> (destructive, added tomorrow)</li>
+<li>Which scopes exist, and which tool needs which?</li>
+<li><code>delete_incident</code> ships tomorrow and nobody updates the table. What happens — and what <em>should</em> happen?</li>
+</ol>
+<p><strong>Sources</strong></p>
+<ul>
+<li>MCP — <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization">Scope selection and step-up authorization, spec 2026-07-28</a></li>
+</ul>
+<h2 id="individual-practice">Individual practice</h2>
+<h3 id="what-you-are-doing-in-the-next-35-minutes">What you are doing in the next 35 minutes</h3>
+<ul>
+<li>Walk an OIDC redirect with PKCE, then break it on purpose and read the error</li>
+<li>Validate a real token against a live JWKS; tamper with one claim; watch it fail</li>
+<li>Present wrong-audience, expired, and insufficient-scope tokens — read 401 vs 403</li>
+<li>Put the proxy in front of <strong>your Week 7 MCP server</strong> and watch <code>401 → 200</code></li>
+<li>Deny a viewer&#39;s <code>post_incident_update</code>, then allow an operator&#39;s</li>
+<li><strong>Evidence:</strong> redirect every terminal&#39;s output as you go — six of HW7&#39;s
+fourteen required artifacts are done before you leave the room</li>
+</ul>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p>Four terminals: issuer (9100), proxy (8930), Week 7 server (8931), and client.
+Restarting the authorization server mints a <strong>new</strong>
+signing key, so every token issued before it is instantly stale.</p>
+</blockquote>
+<h2 id="homework-brief">Homework brief</h2>
+<h3 id="hw7--claims-forensics-and-mcp-authorization">HW7 — Claims Forensics and MCP Authorization</h3>
+<ul>
+<li><strong>100 points</strong>, due before Week 9 · satisfies <strong>Gate 6 — Authorized</strong></li>
+<li>Prove — with transcripts, not assertions — that your validator rejects the
+tokens it should, and that your Week 7 MCP server now refuses unauthorized
+calls</li>
+<li>Deliverables: a sequence diagram from <strong>your</strong> provider&#39;s real endpoints,
+five negative-test transcripts, a claims matrix, and the MCP server behind
+OAuth with per-tool scopes and a captured denial</li>
+<li>Full handout: <a href="homework.html"><code>weeks/week08/homework.md</code></a></li>
+</ul>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p>Submitting a usable token is −20 and a mandatory resubmission with rotation
+evidence. Redact, do not crop — keep the shape.</p>
+</blockquote>
+<h2 id="closing-logistics">Closing logistics</h2>
+<h3 id="before-you-leave">Before you leave</h3>
+<ul>
+<li><strong>Exit ticket:</strong> name one check your resource server performs that would
+still reject a genuine, correctly-signed, unexpired token from your own
+tenant — and say why that is not paranoia</li>
+<li>Revisit your HW6 attacker list. HW8 will test which attacks your
+authorization now blocks</li>
+<li><strong>Week 9 prep is posted</strong> — next week attacks the system you just authorized</li>
+</ul>
+
+</main>
+<footer>Individual coursework. D2L contains dated deadlines, submissions and private course access.</footer>
+</body>
+</html>

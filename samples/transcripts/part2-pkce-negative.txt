@@ -1,0 +1,34 @@
+
+[A] code_challenge  ebb7J0MRiDUx8Iupdg9Czq6c45f0sWRqJ5KOX-4yJ1E
+    code            lab_58bbd02b9211681d07923ff70d37da7263548713661c9c73
+
+--- 1. exchange with the WRONG code_verifier -------------------
+HTTP 400
+{
+  "error": "invalid_grant",
+  "error_description": "PKCE verification failed: S256(code_verifier) != code_challenge",
+  "expected_challenge": "ebb7J0MRiDUx8Iupdg9Czq6c45f0sWRqJ5KOX-4yJ1E",
+  "computed_challenge": "8pQePnrCgIZq5cb4ft6p2KdUbnuw-4ycXhh7vVFIjvA"
+}
+    ^ the stolen code is worthless without the verifier. That is PKCE.
+
+--- 2. the RIGHT verifier, on that same code -------------------
+HTTP 400
+{
+  "error": "invalid_grant",
+  "error_description": "unknown or already-redeemed code"
+}
+    ^ THIS server consumed the code on the failed attempt.
+      RFC 7636 only requires rejecting the wrong verifier; RFC 9700
+      2.1.1 pushes toward revoking. Providers differ — test yours.
+
+--- 3. a clean code, correct verifier, then replayed -----------
+HTTP 200  {"token_type":"Bearer","expires_in":900,"scope":"openid campuspulse.read"}
+HTTP 400  {"error":"invalid_grant","error_description":"unknown or already-redeemed code"}
+    ^ single use, always. RFC 6749 4.1.2: "MUST NOT be used more than once".
+
+--- 4. an authorization request with no PKCE at all ------------
+HTTP 400
+  invalid_request Missing: code_challenge , code_challenge_method This lab authorization server refuses an authorization request without PKCE, the way OAuth 2.1 requires. Add code_challenge and code_challenge_method=S256 .
+    ^ OAuth 2.1 makes PKCE mandatory for every client, not just public ones.
+

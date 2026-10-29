@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From the local identity demonstration to your real application - CSC 436</title>
+<link rel="stylesheet" href="../../assets/course.css">
+<link rel="icon" type="image/svg+xml" href="../../assets/course-icon.svg">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header><a class="course-name" href="../../index.html">CSC 436</a>
+<nav aria-label="Course">
+<a href="../../docs/getting-started.html">Start here</a>
+<a href="../../docs/new_syllabus.html">Syllabus</a>
+<a href="../../docs/course-map.html">Course map</a>
+<a href="../../final-project/index.html">Final project</a>
+</nav></header>
+<main id="main">
+<p class="source-link"><a href="provider-integration.md" download>Download Markdown source</a></p>
+<h1 id="from-the-local-identity-demonstration-to-your-real-application">From the local identity demonstration to your real application</h1>
+<p>The lab issuer is <strong>not an identity provider you may deploy</strong>. <code>login_as</code> selects
+a role without authenticating anyone; <code>/mint</code> issues arbitrary fixtures;
+<code>/logout</code> destroys no session. Its tokens are usable against the lab proxy
+while it runs, so redact them too. Stop it when finished.</p>
+<h2 id="1-obtain-the-course-tenant-handoff-before-starting-hw7">1. Obtain the course tenant handoff before starting HW7</h2>
+<p>The instructor provisions individual registrations and two synthetic accounts.
+Copy these values into your <strong>private environment</strong>, not your repository:</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Value</th><th>Where to obtain/verify it</th></tr></thead><tbody><tr><td><code>ISSUER</code></td><td>Exact issuer supplied for your registration; fetch its discovery URL</td></tr><tr><td><code>DISCOVERY_URL</code></td><td>Tenant handoff, ordinarily <code>ISSUER/.well-known/openid-configuration</code></td></tr><tr><td><code>WEB_CLIENT_ID</code></td><td>Your web app registration (never a classmate&#39;s)</td></tr><tr><td><code>MCP_CLIENT_ID</code></td><td>Separate MCP client registration</td></tr><tr><td><code>REDIRECT_URI</code></td><td>An exact registered callback, including port and path</td></tr><tr><td><code>MCP_RESOURCE</code> / <code>MCP_RESOURCE_URL</code></td><td>Canonical MCP resource URL sent in the authorization flow; use the same configured registration</td></tr><tr><td><code>OIDC_AUDIENCE</code></td><td>Exact access-token audience for that resource registration, not the web client&#39;s ID-token audience</td></tr><tr><td>Authenticated starter scopes</td><td><code>status:read</code>, <code>incidents:read</code>, <code>incidents:write</code></td></tr><tr><td>Test identities</td><td>One viewer, one operator; synthetic accounts you operate yourself</td></tr></tbody></table></div>
+<p>The issuer, client ID and resource/audience are <strong>three different identifiers</strong>.
+A web ID token names the web client; an MCP access token names the MCP resource.
+Do not substitute one for another just to make validation pass.
+Some providers use a dedicated API audience identifier distinct from the public
+resource URL; document that mapping and configure <code>OIDC_AUDIENCE</code> accordingly.
+The local teaching issuer/proxy uses <code>campuspulse.read</code> and
+<code>campuspulse.incident.write</code> instead. Those are a <strong>different demonstration
+profile</strong>, not automatically accepted aliases in the authenticated starter.</p>
+<p>If any handoff value or account is missing, stop real-provider integration and
+report that specific blocker in D2L. Complete the local lab while the instructor
+repairs provisioning. Local fixtures may earn the diagnostic homework rows;
+they do not establish real-provider login or clear the Authorized gate.</p>
+<p>The course now supplies a maintained-library
+<a href="../../samples/oidc-web-app/index.html">browser OIDC/BFF integration</a>, including
+callback/session handling, the authenticated MCP connection and an exact-text
+operator approval step. Start with its full local standards-provider demo,
+then configure the same application against your assigned tenant.</p>
+<p>The earlier first-web-app sample still provides a UI/API contract, <strong>not an
+OIDC implementation</strong>. Its <code>ALLOW_WRITES=1</code> flag remains loopback practice only.
+Use the new BFF routes from your frontend rather than enabling that flag in
+public. If the actual tenant or an approved alternative integration is missing,
+record <strong>real-provider</strong> sign-in as blocked; the local demo is not evidence that
+an external tenant was provisioned.</p>
+<h2 id="2-check-the-registration-not-a-tutorials-defaults">2. Check the registration, not a tutorial&#39;s defaults</h2>
+<p>In the tenant&#39;s client/application registration:</p>
+<ol>
+<li>Enable authorization-code flow and S256 PKCE. Disable implicit/password grants.</li>
+<li>Register the exact callback your app handles. Do not use wildcard callbacks.</li>
+<li>For a browser/public client, do <strong>not</strong> provision or embed a client secret.
+For a confidential backend client, keep its secret only in backend configuration.</li>
+<li>Define the read/write scopes for the resource server. Assign operator role only
+to the operator account; a client&#39;s granted scope is not a user&#39;s role.</li>
+<li>Configure the audience mapping for the MCP resource. Verify a decoded token&#39;s
+actual <code>aud</code>; the <code>resource</code> parameter alone cannot configure a provider.</li>
+<li>If the provisioned provider cannot issue the audience/scopes required by the
+pinned MCP authorization profile, request the course-compatible registration.
+Do not disable audience validation or claim a provider supports an untested flow.</li>
+</ol>
+<p>Export redacted settings as evidence. These steps describe the settings to verify;
+your handoff must include the tenant&#39;s concrete screen names or an importable
+configuration. A generic provider-homepage link is not a sufficient handoff.</p>
+<h2 id="3-walk-the-real-code-flow-once">3. Walk the real code flow once</h2>
+<p><strong>Supported application route:</strong> run
+<code>npm --prefix samples\oidc-web-app run demo</code> after the locked installs in its
+<a href="../../samples/oidc-web-app/index.html">README</a>. A real local <code>oidc-provider</code>
+password page, authorization code, S256 verifier, signed ID/access tokens and
+JWKS verification connect to the actual authenticated MCP handler. Temporary
+viewer/operator accounts are printed for that run. The BFF stores tokens on
+the server; the browser gets only an opaque <code>HttpOnly</code> cookie.</p>
+<p>For your assigned tenant, copy the BFF&#39;s <code>.env.example</code> into private
+configuration, use its exact <code>/auth/callback</code> URL and registered confidential
+client method, then run <code>npm start</code> in that sample. Complete the same browser
+steps and label those captures as external-tenant observations.</p>
+<p><strong>Optional hand-run protocol diagnostic:</strong> the helper below is for understanding
+the wire parameters, not a substitute for the working application&#39;s callback
+and sessions. It assumes its own <strong>public-client</strong> registration; never substitute
+the BFF&#39;s confidential-client ID without its required backend authentication.</p>
+<p>PowerShell, from the course root:</p>
+<pre><code class="language-powershell">New-Item -ItemType Directory -Force raw-evidence,evidence | Out-Null
+# Add raw-evidence/ to your project&#39;s .gitignore before capture.
+Invoke-WebRequest $env:DISCOVERY_URL -OutFile evidence\01-discovery.json
+node weeks\week08\samples\pkce.mjs `
+  --discovery $env:DISCOVERY_URL --client-id $env:MCP_CLIENT_ID `
+  --redirect-uri $env:REDIRECT_URI --resource $env:MCP_RESOURCE `
+  --scope &quot;openid status:read incidents:read&quot;
+</code></pre>
+<p>The helper prints a verifier and URL. Treat its output as raw credentials, not
+submission evidence. Open the URL with DevTools <strong>Preserve log</strong> enabled. Sign
+in as the viewer. Your callback should check returned <code>state</code> against the
+one saved before redirect and <code>iss</code> when the provider returns it. Exchange the
+code exactly once, with that verifier, client ID, callback, and resource.
+The helper prints a Bash token-request template; in PowerShell use:</p>
+<pre><code class="language-powershell"># CODE and VERIFIER are the just-captured values in your private environment.
+$discovery = Get-Content evidence\01-discovery.json -Raw | ConvertFrom-Json
+$tokens = Invoke-RestMethod -Method Post -Uri $discovery.token_endpoint -Body @{
+  grant_type=&#39;authorization_code&#39;; code=$env:CODE
+  client_id=$env:MCP_CLIENT_ID; redirect_uri=$env:REDIRECT_URI
+  code_verifier=$env:VERIFIER; resource=$env:MCP_RESOURCE
+}
+# Do not print or commit $tokens. Decode only for your redacted claims matrix.
+</code></pre>
+<p>This is a <strong>public-client hand-run diagnostic</strong>. A confidential registration
+also needs its registered token-endpoint authentication method. Do not guess
+Basic vs body authentication. Export the HAR into <code>raw-evidence</code>, sanitize,
+then scan using the actual values you handled:</p>
+<pre><code class="language-powershell">node weeks\week08\samples\sanitize-har.mjs raw-evidence\authorize.har evidence\03-authorize.har
+node weeks\week08\samples\scan-evidence.mjs evidence --secrets-from raw-evidence\known-values.txt
+</code></pre>
+<p>Repeat with a <strong>fresh</strong> authorization code and intentionally wrong verifier.
+Record whether that code can subsequently be redeemed correctly. Do not infer
+your provider&#39;s behavior from the local issuer.
+The PKCE helper prints parameters; it does not install a callback handler,
+bind state to an application session, or establish a logged-in browser.</p>
+<h2 id="4-integrate-rather-than-merely-decode">4. Integrate, rather than merely decode</h2>
+<h3 id="use-the-supported-authenticated-mcp-entry">Use the supported authenticated MCP entry</h3>
+<p>The shared starter now implements JWT verification and per-request caller/audit
+propagation. Use it rather than writing another authorization server or placing
+the teaching proxy in front of an anonymous upstream:</p>
+<pre><code class="language-powershell">Set-Location samples\mcp-starter
+# Copy examples\.env.authenticated.example to your ignored .env and configure it.
+npm run build
+npm run start:http:auth
+</code></pre>
+<p>Follow <a href="../../samples/mcp-starter/AUTHENTICATED-HTTP.html">Authenticated HTTP integration</a>
+for exact settings: <code>OIDC_ISSUER</code>, <code>OIDC_AUDIENCE</code>, trusted <code>OIDC_JWKS_URI</code>,
+<code>MCP_RESOURCE_URL</code>, and claim/role mappings. <code>OIDC_SCOPE_CLAIM</code> selects the claim
+field; it does not rename its scope values. The default profile accepts RS256
+and the three starter scopes above.</p>
+<p>If your provisioned tenant uses the teaching profile&#39;s names, the authenticated
+entry now supports this <strong>explicit configuration</strong>, without a custom verifier:</p>
+<pre><code class="language-dotenv">OIDC_SCOPE_CLAIM=scp
+OIDC_SCOPE_MAP=&#39;{&quot;campuspulse.read&quot;:[&quot;status:read&quot;,&quot;incidents:read&quot;],&quot;campuspulse.incident.write&quot;:[&quot;incidents:write&quot;]}&#39;
+</code></pre>
+<p>Use <code>scope</code> instead of <code>scp</code> when that is the actual signed claim. With this
+map selected, request the provider names (<code>openid campuspulse.read</code> for the
+read-only hand-run flow), not the default internal names. The map replaces
+default identity mapping; unlisted raw scopes grant nothing, and it never
+grants the operator role. Metadata/challenges advertise provider names while
+audit records effective internal permissions. Use the matching provisioned
+profile, never disabled issuer/audience/signature checks.</p>
+<p>For the supported path, connect the MCP client directly to this authenticated
+entry through the controlled TLS ingress. The unchanged teaching proxy expects
+different scope names and is not a drop-in intermediary for this profile.
+Keeping it would require an explicitly tested policy adapter; it is not required.</p>
+<p>Stop the anonymous process you own or choose a free loopback <code>PORT</code>. Confirm the
+new process&#39;s <code>/healthz</code> reports <code>authorization: &quot;bearer-jwt&quot;</code>, then test a
+well-formed unauthenticated MCP request returning 401. A failed authenticated
+startup does not replace a different process still listening on the old port.
+Follow the returned <code>resource_metadata</code> URL; the default is
+<code>/.well-known/oauth-protected-resource/mcp</code>, not the teaching proxy&#39;s root path.</p>
+<p>For deterministic local verification, run <code>npm test</code> in the starter or its
+<code>scripts\authenticated-http.test.mjs</code> suite after building. These tests generate
+real signed tokens and ephemeral JWKS servers; they are not external IdP login,
+consent, refresh or deployment evidence. <code>OIDC_ALLOW_HTTP_LOOPBACK=true</code> permits
+only the explicit loopback test profile, never external insecure trust.</p>
+<h3 id="integrate-browser-login-and-session-handling-separately">Integrate browser login and session handling separately</h3>
+<p>Use the supplied <a href="../../samples/oidc-web-app/index.html">browser application</a>,
+which uses <code>openid-client</code>, or an approved maintained client for your stack.
+The supported BFF implements the following responsibilities; preserve them when
+adapting the frontend or changing providers:</p>
+<ul>
+<li>retain state/nonce/verifier only for the pending login and validate the callback;</li>
+<li>validate the ID token&#39;s signature, issuer, client audience, expiry and nonce;</li>
+<li>create a session or hold access tokens in memory, not ship secrets in React;</li>
+<li>validate the API access token&#39;s signature, issuer, <strong>resource</strong> audience and
+expiry on every request, then separately check role and scope;</li>
+<li>use the authenticated subject in the actual state-changing handler and audit;</li>
+<li>clear the local application session at logout and document any still-valid
+access token. Provider logout and refresh-token revocation are separate actions.</li>
+</ul>
+<p><code>start:http:auth</code> remains the resource server; the new browser BFF supplies the
+client responsibilities. Its session ID rotates after login, absolute/idle
+expiry is bounded, refresh is serialized, and failed renewal signs the user out.
+Its operator review records are session-bound, expire and are consumed once
+before the stored arguments are written. A caller cannot replace the text in
+the confirmation request. This approval guarantee covers that browser path;
+other MCP clients need their own trusted host/operator approval.</p>
+<p>For the BFF route, tokens and client credentials stay server-side; the browser
+receives only the protected session cookie. Store
+deployment credentials through the provisioned secret mechanism, never React
+environment variables, committed files or evidence captures. Operator writes
+need a real authorization boundary—not enabling the first-web-app&#39;s local flag
+on a public listener.</p>
+<p>Do not trust a role supplied in a form or an <code>X-User</code> header from an external
+client. A reverse-proxy topology also needs a non-bypassable authenticated or
+private upstream hop. Merely putting two processes on the same laptop does not
+prevent other local processes from reaching the unauthenticated upstream.</p>
+<p>The supplied <code>mcp-auth-proxy.mjs</code> is for <strong>loopback diagnostics</strong>. A 200 with
+<code>MCP_UPSTREAM=stub</code> proves a policy branch only, not MCP execution, persistence,
+real login, end-user audit identity or a safe hosted deployment.</p>
+<h3 id="the-shared-starters-caller-boundary">The shared starter&#39;s caller boundary</h3>
+<p>The starter exposes <code>createServer(store, validatedCaller)</code> in
+<code>samples/mcp-starter/src/server.ts</code>. Its default <code>developmentCaller()</code> is
+deliberately unauthenticated. <code>start:http:auth</code> builds the caller <strong>per request</strong>
+after validation and passes it explicitly. Preserve that behavior if adapting
+the entry; never overwrite one global caller when requests may overlap.</p>
+<p>Its <code>CallerContext</code> fields are:</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Field</th><th>Trusted source</th></tr></thead><tbody><tr><td><code>issuer</code></td><td>Validated issuer used to scope the audited subject</td></tr><tr><td><code>subject</code></td><td>Validated, nonempty <code>sub</code></td></tr><tr><td><code>clientId</code></td><td>Configured validated client-identity claim; authenticated mode rejects missing/empty identity</td></tr><tr><td><code>scopes</code></td><td>Granted starter permissions from the configured verified claim</td></tr><tr><td><code>isOperator</code></td><td>Trusted role mapping, not a request argument or caller-set header</td></tr></tbody></table></div>
+<p>The authenticated starter expects <code>status:read</code>, <code>incidents:read</code> and
+<code>incidents:write</code>. The local teaching proxy&#39;s <code>campuspulse.*</code> names are not
+synonyms. Configure the registration to emit the supported values or set the
+explicit <code>OIDC_SCOPE_MAP</code> profile above. Unknown scopes grant nothing.
+The write handler still requires <code>isOperator</code>. If you added a third read tool,
+add its explicit policy entry without weakening deny-by-default.</p>
+<p>Verify that two different synthetic users produce their own subjects in the
+<strong>upstream tool audit</strong>, not merely in the proxy log. Forwarding a bearer header
+to an upstream that still calls <code>developmentCaller()</code> does not accomplish this.
+The supported authenticated entry implements this boundary; the anonymous
+<code>start:http</code> entry does not. Combine it with the browser BFF for login/session
+handling and argument-bound approval, then separately rehearse the provisioned
+provider&#39;s logout, revocation and token-expiry policy.</p>
+<h2 id="5-minimum-acceptance-record">5. Minimum acceptance record</h2>
+<p>Reuse one evidence index for HW7, the Authorized gate and final. Identify each
+row as <strong>real provider</strong>, <strong>local fixture</strong>, or <strong>not yet verified</strong>:</p>
+<p>The earlier public deployment must already reject unauthenticated writes with
+401/403 and leave state unchanged. Preserve that regression while adding
+authenticated operator writes for <strong>Gate 6</strong>. Passing local fixture tests is not
+permission to enable a local-write flag on a public listener.</p>
+<ol>
+<li>Browser login with your real viewer and operator accounts.</li>
+<li>Viewer read allowed; viewer write denied; operator write allowed.</li>
+<li>A token with write scope but no operator role denied, and an operator token
+with only read scope denied (local fixtures are appropriate for these).</li>
+<li>Missing, expired, wrong-issuer/audience and tampered credentials denied.</li>
+<li>A real tool call through the protected path, and a direct-origin bypass test.</li>
+<li>Application logout, refresh and expiry; local synthetic stream lifetime labeled
+separately from a real authenticated stream.</li>
+</ol>
+<p>Use <a href="../../docs/deployment-runbook.html">the deployment runbook</a> for the network,
+TLS and secret-storage boundary. A successful local demonstration must never be
+reported as a successful production/IdP integration.</p>
+<h2 id="6-public-session-and-authorization-reference">6. Public session and authorization reference</h2>
+<p>These explanations remain available even when the lecture runs out of time.
+Do not depend on private instructor notes for HW7.</p>
+<p><strong>A scope and a role answer different questions.</strong> A scope limits what the
+client was granted permission to request. A role describes the user&#39;s assigned
+authority. Effective permission is their intersection, followed by object-level
+checks. A viewer with write scope still fails the operator-role check; an
+operator using a read-only client still cannot write.</p>
+<p><strong>RBAC</strong> checks a role, such as operator. <strong>ABAC</strong> additionally checks trusted
+attributes, such as whether the incident and operator belong to the same
+synthetic campus. Never accept the actor&#39;s role/campus merely because a request
+body asserted it. Map validated claims and server-owned records to the decision.</p>
+<p><strong>SPA vs BFF:</strong> a browser SPA cannot keep a shared client secret. A backend-for-
+frontend keeps OAuth tokens server-side and gives the browser a session cookie.
+This reduces token theft through JavaScript but does not eliminate XSS: malicious
+script may still issue actions using the user&#39;s active browser session.</p>
+<p>For a real HTTPS BFF, inspect its actual session cookie:</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Attribute</th><th>Meaning</th></tr></thead><tbody><tr><td><code>Secure</code></td><td>Send only over HTTPS; the local HTTP fixture is not production proof</td></tr><tr><td><code>HttpOnly</code></td><td>Browser JavaScript cannot read the cookie; it can still send requests</td></tr><tr><td><code>SameSite=Lax</code> or stricter justified choice</td><td>Restricts cross-site cookie delivery; use the framework&#39;s CSRF protection too</td></tr><tr><td><code>Path</code> and omitted/bounded <code>Domain</code></td><td>Limit where the cookie is sent; avoid unnecessary subdomain sharing</td></tr><tr><td><code>Max-Age</code> / <code>Expires</code></td><td>Browser storage lifetime, not automatic server-side session revocation</td></tr></tbody></table></div>
+<p>Capture the header with values redacted, then verify login, one authorized
+operation, a denied operation and logout. The logout handler should invalidate
+the application session and expire the cookie using matching path/domain
+attributes. A client-side redirect alone does neither.</p>
+<p><strong>Refresh</strong> exchanges a refresh credential for a new access token. Rotation
+replaces the refresh credential; reuse detection can revoke its family.
+<strong>Logout</strong> ends the application/provider session according to the implemented
+flow. <strong>Revocation</strong> invalidates a credential according to the provider&#39;s model.
+An already-issued self-contained access token may remain accepted until expiry
+unless the resource server also checks revocation. State that residual lifetime.</p>
+<p>Use the local issuer to rehearse deterministic negatives, not to prove real
+session logout. Its <code>/logout</code> intentionally explains that it has no session.
+A long-lived stream also needs lifetime supervision: authenticating its opening
+request does not keep the decision valid forever. Reconnect with a fresh
+credential after termination; do not put bearer tokens in stream URLs.</p>
+<p>For the no-personal-AI route, use the <a href="../../docs/non-ai-review-artifacts.html">HW7 supplied draft</a>.</p>
+
+</main>
+<footer>Individual coursework. D2L contains dated deadlines, submissions and private course access.</footer>
+</body>
+</html>

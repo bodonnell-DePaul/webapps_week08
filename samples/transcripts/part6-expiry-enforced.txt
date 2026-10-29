@@ -1,0 +1,17 @@
+
+token minted with a 8-second lifetime
+  exp 1786828866  (2026-08-15T21:21:06.000Z)
+  scope openid campuspulse.read
+
+opening a subscriptions/listen stream. Watching for 20s.
+
+t+  0s  stream opened: HTTP 200 text/event-stream
+t+  0s  open           {"sub":"a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11","exp":1786828866,"expires_in":8,"enforcing":true}
+t+  2s  heartbeat      {"n":1,"token_expires_in":6,"still_streaming":true}
+t+  4s  heartbeat      {"n":2,"token_expires_in":4,"still_streaming":true}
+t+  6s  heartbeat      {"n":3,"token_expires_in":2,"still_streaming":true}
+t+  8s  token_expired  {"error":"invalid_token","error_description":"access token expired; re-authorize and reconnect","stream_age_s":8}
+
+t+  8s  stream CLOSED by the authorization proxy at token expiry.
+       The client must re-authorize and reconnect. Correct behaviour.
+

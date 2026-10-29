@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HW7 — Claims Forensics and MCP Authorization - CSC 436</title>
+<link rel="stylesheet" href="../../assets/course.css">
+<link rel="icon" type="image/svg+xml" href="../../assets/course-icon.svg">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header><a class="course-name" href="../../index.html">CSC 436</a>
+<nav aria-label="Course">
+<a href="../../docs/getting-started.html">Start here</a>
+<a href="../../docs/new_syllabus.html">Syllabus</a>
+<a href="../../docs/course-map.html">Course map</a>
+<a href="../../final-project/index.html">Final project</a>
+</nav></header>
+<main id="main">
+<p class="source-link"><a href="homework.md" download>Download Markdown source</a></p>
+<h1 id="hw7--claims-forensics-and-mcp-authorization">HW7 — Claims Forensics and MCP Authorization</h1>
+<p><strong>CSC 436 · Week 8 · Assigned in class, due before Week 9 · 100 points</strong></p>
+<p><strong>No personal AI subscription required:</strong> the
+<a href="../../docs/non-ai-review-artifacts.html">HW7 supplied review draft</a>
+is an equally graded option for the challenged claim. Cite the supplied draft,
+not an invented personal AI exchange.</p>
+<p><strong>Required route: 8–10 hours with the provisioned tenant and Week 7 starter.</strong>
+Read <a href="provider-integration.html">the provider integration checklist</a> first.
+The <a href="../../samples/oidc-web-app/index.html">supported browser OIDC/BFF baseline</a>
+provides the maintained client, callback, session and authenticated application
+path. Reuse it; do not spend the assignment writing your own OIDC protocol.
+Its real local-provider demo is preparation, while the assigned tenant&#39;s
+observations remain separately labeled.
+Use the shared <a href="../../samples/mcp-starter/AUTHENTICATED-HTTP.html">authenticated HTTP entry</a>
+for the actual MCP resource server. Keep the <code>campuspulse.*</code> teaching-proxy
+scope profile separate from its <code>status:read</code> / <code>incidents:read</code> /
+<code>incidents:write</code> production-integration profile.
+Reuse lab negatives, your existing App, and the same evidence in the final;
+do not build a second authorization layer. Environment/provisioning failures
+must be labeled, not disguised with local fixture transcripts.</p>
+<blockquote>
+<p><strong>The point of this assignment, in one sentence:</strong> prove — with transcripts, not
+assertions — that your identity layer rejects the tokens it should reject, and
+that the MCP server you built last week now refuses the calls it should refuse.</p>
+</blockquote>
+<hr>
+<h2 id="1-where-this-fits">1. Where this fits</h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>Satisfies</strong></td><td><strong>Gate 6 — Authorized</strong> on the final project. OIDC login working; operator vs. viewer roles enforced; MCP server behind OAuth with per-tool scopes.</td></tr><tr><td><strong>Builds on</strong></td><td>HW6 (at least three read tools and one confirmed action) and your Week 7 &quot;what an attacker could currently do&quot; list.</td></tr><tr><td><strong>Feeds</strong></td><td>HW8 (Week 9) attacks this exact system. Your audit log and policy table become Week 9 inputs. Half your Week 7 attacker list should be false by the time you submit this.</td></tr></tbody></table></div>
+<p>You are not building a new system. You are <strong>authorizing the one you have</strong>, and
+documenting what you can now prove about it.</p>
+<hr>
+<h2 id="2-prerequisites">2. Prerequisites</h2>
+<p>Before you start, all of these must be true:</p>
+<ul>
+<li><input disabled="" type="checkbox"> Your <strong>Week 7 MCP server runs</strong>, with at least three read tools and exactly
+one confirmation-gated action, plus the working feed/App required at Gate 5.</li>
+<li><input disabled="" type="checkbox"> You have your <strong>client registration</strong> in the course OIDC tenant, plus the <strong>separate MCP client registration</strong> with its own audience. (URLs and client IDs: <a href="index.html"><code>README.md</code></a>.)</li>
+<li><input disabled="" type="checkbox"> You know your tenant&#39;s <strong>viewer</strong> and <strong>operator</strong> test-user credentials.</li>
+<li><input disabled="" type="checkbox"> You have completed the <strong>Week 8 lab</strong> — the transcripts it produces are 6 of the 14 required artifacts.</li>
+<li><input disabled="" type="checkbox"> Node.js 24 LTS for course scripts; production library in your chosen stack.</li>
+</ul>
+<blockquote>
+<p><strong>If your Week 7 server does not run</strong>, fix that first and say so in your AI-use
+log. <code>MCP_UPSTREAM=stub</code> unblocks the lab but <strong>does not</strong> satisfy Task 6 — Task 6
+requires your own server behind OAuth.</p>
+</blockquote>
+<hr>
+<h2 id="3-tasks">3. Tasks</h2>
+<h3 id="task-1--map-your-providers-actual-flow-8-pts">Task 1 — Map your provider&#39;s actual flow (8 pts)</h3>
+<ol>
+<li>Fetch your tenant&#39;s discovery document and save it:<pre><code class="language-bash">curl -s &quot;$TENANT/.well-known/openid-configuration&quot; &gt; evidence/01-discovery.json
+</code></pre>
+</li>
+<li>Draw a <strong>sequence diagram</strong> of Authorization Code + PKCE using <strong>your provider&#39;s
+real endpoint URLs</strong> — copied from that document, not from a tutorial. Mermaid,
+draw.io, or clean hand-drawing all acceptable.</li>
+<li>Label on the diagram where <code>state</code>, <code>nonce</code>, <code>code_challenge</code>, <code>code_verifier</code>,
+<code>resource</code>, and <code>iss</code> each appear, and <strong>which party checks each one</strong>.</li>
+<li>Write one paragraph: name <strong>two fields in your discovery document that surprised
+you</strong>, and say what each one commits your provider to.</li>
+</ol>
+<blockquote>
+<p>A diagram with <code>https://authserver.example/authorize</code> on it scores zero for this
+task. The point is that you read <em>your</em> provider&#39;s configuration.</p>
+</blockquote>
+<h3 id="task-2--capture-the-code-exchange-with-pkce-visible-8-pts">Task 2 — Capture the code exchange with PKCE visible (8 pts)</h3>
+<ol>
+<li><p>Use the supported BFF&#39;s sign-in flow, which constructs and stores the
+state/nonce/PKCE transaction. The hand-run helper in
+<a href="provider-integration.html">provider integration</a> is an optional protocol
+diagnostic, not a replacement for application login.</p>
+</li>
+<li><p>Run the redirect <strong>in a browser with DevTools recording</strong>, Preserve log on.</p>
+</li>
+<li><p>Export the HAR. <strong>Sanitize it</strong> — see §5 — and save as <code>evidence/02-authorize.har</code>.
+Use the final filename <code>evidence/03-authorize.har</code>. In your write-up, quote the request line showing <code>code_challenge=</code> and
+<code>code_challenge_method=S256</code>.</p>
+</li>
+<li><p><strong>The token request is a separate artifact.</strong> It is a direct server-to-server
+call in a BFF and will not appear in that browser HAR; a public SPA may make
+it in the browser. Record which architecture you tested. Capture it with
+<code>curl -v</code> (or your client&#39;s log) and save the sanitized transcript as
+<code>evidence/02b-token-exchange.txt</code>, showing <code>code_verifier=</code> and <code>resource=</code>.</p>
+<pre><code class="language-bash">curl -sv -X POST &quot;$TOKEN_ENDPOINT&quot; \
+  -d grant_type=authorization_code \
+  -d code=&quot;&lt;CODE&gt;&quot; \
+  -d redirect_uri=&quot;&lt;YOUR_REDIRECT_URI&gt;&quot; \
+  -d client_id=&quot;$CLIENT_ID&quot; \
+  -d code_verifier=&quot;&lt;VERIFIER&gt;&quot; \
+  -d resource=&quot;$MCP_RESOURCE&quot; 2&gt;&amp;1 | tee 02b-token-exchange.raw.txt
+</code></pre>
+<blockquote>
+<p><strong>If your client is confidential</strong>, it must also authenticate — add
+<code>-u &quot;$CLIENT_ID:$CLIENT_SECRET&quot;</code> (HTTP Basic, RFC 6749 §2.3.1). <strong>The secret
+must not appear in the submitted transcript</strong>: redact the <code>Authorization: Basic …</code> line, and say in your write-up which authentication method you used.
+If your tenant also has a public/native client registered for
+<code>http://127.0.0.1:5173/callback</code>, use that instead and say so — a public
+client with PKCE is the correct shape for a hand-run flow.</p>
+</blockquote>
+</li>
+<li><p><strong>Negative test:</strong> exchange a code with a deliberately wrong <code>code_verifier</code>.
+Capture the full error body in <code>evidence/04-pkce-negative.txt</code>. Explain in two
+sentences what an attacker who stole your authorization code can do with it,
+and why.</p>
+</li>
+<li><p><strong>Then answer one question with evidence:</strong> after a <em>failed</em> exchange, does
+your provider still accept the correct verifier for that same code, or was the
+code consumed? Both behaviours occur in the wild. RFC 7636 §4.6 only requires
+rejection; RFC 9700 §2.1.1 pushes toward revocation. <strong>Test it and say which
+yours does.</strong></p>
+</li>
+</ol>
+<h3 id="task-3--the-claims-matrix-10-pts">Task 3 — The claims matrix (10 pts)</h3>
+<p>Obtain <strong>both</strong> an access token and an ID token from your tenant for the same
+login. Decode both. Produce a table with <strong>one row per claim that appears in
+either token</strong>:</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Claim</th><th>In access token</th><th>In ID token</th><th>Value (redacted)</th><th>What it means</th><th><strong>Who consumes it</strong></th><th>What breaks if you ignore it</th></tr></thead><tbody><tr><td><code>iss</code></td><td>✔</td><td>✔</td><td><code>https://…</code></td><td>issuer identity</td><td>resource server <strong>and</strong> client</td><td>any issuer&#39;s tokens are accepted</td></tr></tbody></table></div>
+<p>Cover at minimum: <code>iss</code>, <code>sub</code>, <code>aud</code>, <code>exp</code>, <code>iat</code>, <code>nbf</code>, <code>azp</code>, <code>scope</code>,
+<code>roles</code> (or your provider&#39;s equivalent), <code>amr</code>, <code>nonce</code>, and your authorization
+custom claims. Mark absent optional claims <strong>absent</strong>, with what that means;
+do not invent <code>nbf</code>, <code>azp</code>, <code>roles</code> or <code>amr</code>. For an opaque access token, use
+the provider&#39;s documented introspection output instead of trying to decode it.</p>
+<p>Then answer, in prose:</p>
+<ul>
+<li>Which claims appear in <strong>only one</strong> of the two tokens, and why that is correct.</li>
+<li>What your API would lose if it accepted the ID token instead of the access token.</li>
+</ul>
+<blockquote>
+<p><strong>This is the highest-value task in the assignment.</strong> It is also the one students
+most often submit as a bare list of claim names with dictionary definitions. The
+graded columns are <strong>&quot;who consumes it&quot;</strong> and <strong>&quot;what breaks&quot;</strong>.</p>
+</blockquote>
+<h3 id="task-4--validation-proven-10-pts">Task 4 — Validation, proven (10 pts)</h3>
+<p>Implement token validation in <strong>your own resource server</strong>, in your own language.
+You may use a maintained library (<code>jose</code>, <code>python-jose</code>,
+<code>Microsoft.IdentityModel.Tokens</code>, <code>github.com/lestrrat-go/jwx</code>, …) — you are graded
+on the configuration and the evidence, not on hand-rolled cryptography.</p>
+<p>Submit:</p>
+<ol>
+<li>Your validation configuration — issuer, audience, <strong>algorithm allow-list</strong>,
+clock skew, JWKS caching policy — as committed code or config, with the file
+path and line numbers.</li>
+<li>Output showing <strong>all</strong> of these checks passing on a good token: signature,
+issuer, audience, expiry.</li>
+<li><strong>Five negative tests</strong>, each with the request, the response status, the
+<code>WWW-Authenticate</code> header, and one sentence of diagnosis:</li>
+</ol>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>#</th><th>Token presented</th><th>Required status</th></tr></thead><tbody><tr><td>4a</td><td>expired</td><td>401</td></tr><tr><td>4b</td><td>wrong issuer</td><td>401</td></tr><tr><td>4c</td><td>wrong audience</td><td>401</td></tr><tr><td>4d</td><td>tampered payload, original signature</td><td>401</td></tr><tr><td>4e</td><td>valid, but missing the required scope</td><td><strong>403</strong></td></tr></tbody></table></div>
+<ol start="4">
+<li>A short paragraph: <strong>why 4c is a 401 and 4e is a 403.</strong> Getting this backwards
+is diagnosed here; the same defect is not deducted twice at the gate.</li>
+</ol>
+<blockquote>
+<p>Use the course tenant&#39;s wrong-audience test user for 4c, or the lab
+authorization server&#39;s <code>/mint?variant=wrong-audience</code>. The CLI flag belongs
+to <code>validate-token.mjs</code>, not <code>authz-server.mjs</code>. Say which issuer you tested.
+For local negatives configure a separate test validator to trust the local
+issuer/JWKS: otherwise every fixture just fails signature/issuer, not the
+intended audience/expiry check. Never add the lab issuer to production trust.</p>
+</blockquote>
+<h3 id="task-5--session-handling-6-pts">Task 5 — Session handling (6 pts)</h3>
+<ol>
+<li>State which session architecture your app uses — <strong>token-in-memory SPA</strong> or
+<strong>Backend-for-Frontend</strong> — and justify it <strong>against a threat</strong>, not a preference.
+One paragraph. &quot;The tutorial did it&quot; is not a justification.</li>
+<li>If you use cookies: paste the actual <code>Set-Cookie</code> header and annotate every
+attribute.</li>
+<li>Evidence for all three of:<ul>
+<li>a <strong>refresh</strong> happening (before/after <code>exp</code>, or the token response)</li>
+<li><strong>logout</strong> — and what is still true afterwards</li>
+<li><strong>expiry</strong> — a request that succeeds, then the same request after <code>exp</code>, with statuses</li>
+</ul>
+</li>
+<li>One sentence: after logout, how long can an already-issued access token still
+be used against your API, and what would you change to shorten that?</li>
+</ol>
+<h3 id="task-6--your-mcp-server-behind-oauth-14-pts">Task 6 — Your MCP server behind OAuth (14 pts)</h3>
+<p>This is the assignment&#39;s centre of gravity.</p>
+<ol>
+<li><strong>Publish protected-resource metadata.</strong> Follow the exact <code>resource_metadata</code>
+URL in the 401 challenge and paste its JSON and URL. The authenticated
+starter defaults to <code>/.well-known/oauth-protected-resource/mcp</code>; the local
+teaching proxy also serves a root-level demonstration document.</li>
+<li><strong>The 401 → authorized progression.</strong> One transcript showing, in order:<ul>
+<li>the tool call with no token → <strong>401</strong> with a <code>WWW-Authenticate</code> carrying <code>resource_metadata</code></li>
+<li>the PRM fetch</li>
+<li>the authorization-server metadata fetch</li>
+<li>the token request (PKCE + <code>resource</code>)</li>
+<li>the same tool call with the token → <strong>200</strong></li>
+</ul>
+</li>
+<li><strong>Per-tool scope enforcement.</strong> Submit your <strong>policy table</strong> — every tool, its
+required scope, and the <strong>default for an unlisted tool</strong>. Then capture:<ul>
+<li>a <strong>denied</strong> call: a genuine token without the write scope invoking your
+state-changing tool → <strong>403</strong> with <code>error=&quot;insufficient_scope&quot;</code></li>
+<li>the <strong>same call</strong> with an operator token carrying write scope → <strong>200</strong></li>
+<li>write scope without operator role → <strong>403</strong>, and operator with read-only
+scope → <strong>403</strong>. Use <code>viewer-write</code> and <code>operator-read</code> local variants
+for these independent policy tests, labeled as local.</li>
+</ul>
+</li>
+<li><strong>Audience binding verified.</strong> Present a token whose <code>aud</code> names a <em>different</em>
+resource and show it rejected. State where the <code>resource</code> parameter is sent and
+what your <code>aud</code> value is.</li>
+<li><strong>Expiry on a long-lived connection.</strong> Open a long-lived connection
+(<code>subscriptions/listen</code>, SSE, or WebSocket — whatever your Week 7 system uses),
+let the token expire, and <strong>document what actually happened</strong>. If the connection
+survived its own credential, say so and describe your fix. Both the observed
+behaviour and the fix are graded; only &quot;we did not test it&quot; scores zero.</li>
+<li><strong>Audit log.</strong> At least ten lines in the form
+<strong>actor → tool → arguments-shape → decision → result</strong>, including at least one
+<code>deny</code>. No tokens in the log; use <code>jti</code> or a hash.</li>
+</ol>
+<h3 id="task-7--provider-configuration-sanitized-4-pts">Task 7 — Provider configuration, sanitized (4 pts)</h3>
+<p>Export your client registration(s) — web client and MCP client — as <strong>JSON with
+every secret replaced by <code>&lt;REDACTED:client_secret&gt;</code></strong>, or as a screenshot with
+secrets visibly blacked out. Must show: client id, redirect URIs, grant types,
+PKCE requirement, the scopes defined, and the audience/resource identifier.
+Also state what blocks direct access to the unauthenticated upstream. A local
+stub/proxy demonstration is not evidence that this deployment boundary is safe.</p>
+<blockquote>
+<p>Prefer the JSON form — it is what the redaction attestation in §4 is written
+for, and a blacked-out screenshot cannot be machine-scanned.</p>
+</blockquote>
+<h3 id="task-8--the-eight-part-evidence-standard-40-pts">Task 8 — The eight-part evidence standard (40 pts)</h3>
+<p>Every submission carries all eight parts. See §4.</p>
+<hr>
+<h2 id="4-required-evidence-artifacts">4. Required evidence artifacts</h2>
+<p>Submit <strong>all fourteen</strong>, in an <code>evidence/</code> directory, named as shown:</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>#</th><th>File</th><th>From</th></tr></thead><tbody><tr><td>01</td><td><code>01-discovery.json</code></td><td>Task 1</td></tr><tr><td>02</td><td><code>02-sequence-diagram.(png|svg|md)</code></td><td>Task 1</td></tr><tr><td>03</td><td><code>03-authorize.har</code> <strong>(sanitized)</strong> + <code>02b-token-exchange.txt</code> <strong>(sanitized)</strong></td><td>Task 2</td></tr><tr><td>04</td><td><code>04-pkce-negative.txt</code></td><td>Task 2</td></tr><tr><td>05</td><td><code>05-claims-matrix.md</code></td><td>Task 3</td></tr><tr><td>06</td><td><code>06-validation-config.md</code> (path + line refs + excerpt)</td><td>Task 4</td></tr><tr><td>07</td><td><code>07-validation-pass.txt</code></td><td>Task 4</td></tr><tr><td>08</td><td><code>08-validation-negatives.txt</code> (4a–4e)</td><td>Task 4</td></tr><tr><td>09</td><td><code>09-session.md</code> + <code>09-session-evidence.txt</code></td><td>Task 5</td></tr><tr><td>10</td><td><code>10-protected-resource-metadata.json</code></td><td>Task 6.1</td></tr><tr><td>11</td><td><code>11-401-to-200.txt</code></td><td>Task 6.2</td></tr><tr><td>12</td><td><code>12-scope-policy.md</code> + <code>12-denied-then-allowed.txt</code></td><td>Task 6.3</td></tr><tr><td>13</td><td><code>13-audience-binding.txt</code></td><td>Task 6.4</td></tr><tr><td>14</td><td><code>14-expiry-mid-connection.md</code> + transcripts</td><td>Task 6.5</td></tr><tr><td>—</td><td><code>audit.jsonl</code></td><td>Task 6.6</td></tr><tr><td>—</td><td><code>client-config.json</code> (redacted)</td><td>Task 7</td></tr><tr><td>—</td><td><code>README.md</code> — your annotated write-up</td><td>all</td></tr></tbody></table></div>
+<h3 id="the-eight-part-evidence-standard">The eight-part evidence standard</h3>
+<p>Restated from <a href="../../docs/evidence-standard.html"><code>docs/evidence-standard.md</code></a>:</p>
+<ol>
+<li><strong>Commit SHA or release tag</strong> of exactly what was tested.</li>
+<li><strong>Reproduction commands</strong> plus exported config.</li>
+<li><strong>Raw sanitized evidence</strong> — HAR, header dumps, JSON-RPC transcripts.</li>
+<li><strong>Annotated interpretation</strong> in your own words.</li>
+<li><strong>At least one deliberate failure</strong> and its diagnosis. <em>(Tasks 4 and 6 give you five.)</em></li>
+<li><strong>AI-use log</strong> — generated, accepted, rejected, and how you verified.</li>
+<li><strong>One challenged AI claim</strong>, consequential, with the evidence that rejected it.</li>
+<li><strong>Redaction attestation</strong> — see below. <strong>Mandatory this week.</strong></li>
+</ol>
+<h3 id="the-redaction-attestation-mandatory">The redaction attestation (mandatory)</h3>
+<p>Include this, in your own words, in <code>evidence/README.md</code>:</p>
+<blockquote>
+<p>I attest that no artifact in this submission contains a usable credential. All
+access tokens, ID tokens, refresh tokens, authorization codes, client secrets,
+cookies, and <code>code_verifier</code> values have been replaced with typed placeholders
+preserving their shape. Any token that appears in decoded form is expired and
+was issued by the course lab authorization server, whose signing key does not
+persist. I have verified this by scanning the submission with
+<code>&lt;the command you ran&gt;</code>.</p>
+</blockquote>
+<p><strong>Replace, do not crop.</strong> Keep the shape:</p>
+<pre><code class="language-text">Authorization: Bearer &lt;REDACTED:access_token 1043 chars, RS256, exp 2026-08-15T19:13:53Z&gt;
+</code></pre>
+<p>The shape is often the evidence. A blacked-out rectangle proves nothing.</p>
+<blockquote>
+<p><strong>Submitting a usable token</strong> is an automatic zero on that artifact plus a
+mandatory resubmission with rotation evidence. Rotating a leaked credential is
+itself a graded skill — this is a policy, not a threat.</p>
+</blockquote>
+<hr>
+<h2 id="5-sanitizing-evidence">5. Sanitizing evidence</h2>
+<p>A HAR from an OAuth flow contains, at minimum: the authorization code (in a URL),
+the token response body, session cookies, and sometimes the <code>code_verifier</code>. It
+hides in five places — <strong>URLs, query-string arrays, headers, cookie arrays, and
+bodies</strong> — so a sanitizer that only walks one of them is worse than none, because
+it produces false confidence.</p>
+<p><strong>Work in a directory git will never see.</strong> Add these to your <code>.gitignore</code>
+<em>before</em> you capture anything:</p>
+<pre><code class="language-gitignore">raw-evidence/
+weeks/week08/samples/out/
+*.raw.har
+*.raw.txt
+</code></pre>
+<p>Capture into <code>raw-evidence/</code>, sanitize <strong>into</strong> <code>evidence/</code>, and never move a raw
+file by hand.</p>
+<pre><code class="language-bash">node weeks/week08/samples/sanitize-har.mjs raw-evidence/authorize.har evidence/03-authorize.har
+</code></pre>
+<p>A working sanitizer is provided at
+<a href="samples/sanitize-har.mjs"><code>samples/sanitize-har.mjs</code></a>. Read it before you run it —
+you are responsible for what it misses.</p>
+<p>Then <strong>verify</strong>, twice. First a shape scan:</p>
+<pre><code class="language-bash">grep -REn &#39;eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}&#39; evidence/ \
+  &amp;&amp; echo &quot;STILL LEAKING&quot; || echo &quot;no JWTs&quot;
+</code></pre>
+<pre><code class="language-powershell">Get-ChildItem evidence -Recurse -File |
+  Select-String -Pattern &#39;eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}&#39;
+</code></pre>
+<p>A shape scan is <strong>not sufficient</strong> — it does not catch opaque tokens,
+authorization codes, or client secrets, none of which look like a JWT. So second,
+scan for the <strong>actual values</strong> you handled:</p>
+<pre><code class="language-bash">node weeks/week08/samples/scan-evidence.mjs evidence/ --secrets-from raw-evidence/known-values.txt
+</code></pre>
+<p><code>known-values.txt</code> is a file you write, one secret per line, listing every code,
+token, verifier, cookie, and secret that passed through your terminal during the
+assignment. It is gitignored. If the scanner finds any of them under <code>evidence/</code>,
+you are not done.</p>
+<p><strong>Paste the output of both checks into your attestation.</strong></p>
+<hr>
+<h2 id="6-worked-example--what-task-3-depth-looks-like">6. Worked example — what Task 3 depth looks like</h2>
+<p><strong>Insufficient</strong> (this is what most first drafts look like, and it scores ~3/15):</p>
+<blockquote>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Claim</th><th>Meaning</th></tr></thead><tbody><tr><td><code>aud</code></td><td>audience</td></tr><tr><td><code>azp</code></td><td>authorized party</td></tr><tr><td><code>amr</code></td><td>authentication methods</td></tr></tbody></table></div>
+</blockquote>
+<p><strong>Sufficient</strong> (excerpt — three rows at the expected depth):</p>
+<blockquote>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Claim</th><th>Access</th><th>ID</th><th>Value (redacted)</th><th>Meaning</th><th>Who consumes it</th><th>What breaks if ignored</th></tr></thead><tbody><tr><td><code>aud</code></td><td>✔</td><td>✔</td><td>AT: <code>api://campuspulse-mcp</code>  ID: <code>f81d…-web</code></td><td>The party this token was minted <strong>for</strong>. Different value in each token — the access token names our MCP resource server, the ID token names our web client.</td><td>AT: our MCP server, on every request. ID: our React client, once, at login.</td><td>Our MCP server would accept tokens issued for our <strong>grades API</strong>, which carries a broader scope. Our per-tool policy would be bypassable by obtaining a grades-API token instead. Verified: <code>evidence/13-audience-binding.txt</code> shows a grades-audience token rejected 401.</td></tr><tr><td><code>azp</code></td><td>✔</td><td>—</td><td><code>campuspulse-mcp-client</code></td><td>Which <strong>client</strong> requested this token, as distinct from which user it represents. Present because our tenant issues to two clients against one audience.</td><td>Our MCP server, for audit correlation — not for the authorization decision.</td><td>We could not tell, in the audit log, whether a write came from the web app or from a model in an MCP host. That distinction is the whole of the Week 9 confused-deputy discussion.</td></tr><tr><td><code>amr</code></td><td>✔</td><td>✔</td><td><code>[&quot;pwd&quot;]</code> for viewer, <code>[&quot;pwd&quot;,&quot;mfa&quot;]</code> for operator</td><td>How the subject authenticated in this session.</td><td>Our MCP server, for one tool only.</td><td><code>delete_incident</code> could be invoked by a session that never did MFA. We enforce <code>amr ∋ &quot;mfa&quot;</code> for that tool and return 403 with a step-up challenge otherwise — see <code>evidence/12-scope-policy.md</code> row 4.</td></tr></tbody></table></div>
+</blockquote>
+<p>Notice what makes the second version pass: <strong>a real value, both token columns
+filled in, the consumer named, a specific consequence, and a cross-reference to
+the artifact that proves it.</strong></p>
+<h3 id="and-what-task-65-depth-looks-like">And what Task 6.5 depth looks like</h3>
+<p><strong>Insufficient:</strong> <em>&quot;The token expires and the user has to log in again.&quot;</em></p>
+<p><strong>Sufficient:</strong></p>
+<blockquote>
+<p>Our Week 7 feed uses <code>subscriptions/listen</code> (a single long-lived POST stream).
+Our first implementation validated the bearer token when the stream opened and
+never again. We minted a 6-second token, opened the stream, and captured 14
+seconds: the stream was still emitting at <code>token_expires_in: -6</code>
+(<code>evidence/14-expiry-bug.txt</code>). The audit log&#39;s last entry
+for that stream was <code>&quot;decision&quot;:&quot;allow&quot;</code> — so a revoked operator would have kept
+receiving incident data with <strong>no further log line</strong>, which is worse than the
+data leak.</p>
+<p>Fix: the proxy now records <code>exp</code> at stream open and arms a timer; on fire it
+emits <code>event: token_expired</code> and closes, logging
+<code>&quot;decision&quot;:&quot;terminate&quot;,&quot;reason&quot;:&quot;token_expired_mid_stream&quot;</code>
+(<code>evidence/14-expiry-fixed.txt</code>). We chose termination
+over in-band re-authorization because our client already reconnects with backoff
+(HW6 §4), so the cost is one reconnect.</p>
+<p>My stated expiry behaviour is termination at <code>exp</code>. <strong>Residual risk we
+are accepting:</strong> this bounds exposure to at most one token lifetime; it does
+<strong>not</strong> detect revocation. A user revoked at minute 2 keeps receiving data until
+minute 15. Closing that gap needs either a shorter access-token lifetime or an
+on-stream revocation check, and we have done neither, because our reconnect
+storm budget (HW6) assumes ≤ 4 reconnects/hour/client.</p>
+</blockquote>
+<hr>
+<h2 id="7-rubric-100-points">7. Rubric (100 points)</h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>#</th><th>Criterion</th><th style="text-align:right">Pts</th></tr></thead><tbody><tr><td>1</td><td><strong>Provider flow mapped</strong> — real endpoints, six parameters located, two surprising fields explained</td><td style="text-align:right">8</td></tr><tr><td>2</td><td><strong>Code exchange</strong> — real flow, PKCE and code-consumption negative</td><td style="text-align:right">8</td></tr><tr><td>3</td><td><strong>Claims matrix</strong> — present/absent claims, consumer and consequence</td><td style="text-align:right">10</td></tr><tr><td>4</td><td><strong>Validation</strong> — configuration, positive path, five correctly isolated negatives</td><td style="text-align:right">10</td></tr><tr><td>5</td><td><strong>Sessions</strong> — actual refresh/logout/expiry, architecture explained</td><td style="text-align:right">6</td></tr><tr><td>6</td><td><strong>MCP authorization</strong> — metadata/progression (4), independent scope/role (4), audience (2), stream lifetime (2), audit (2)</td><td style="text-align:right">14</td></tr><tr><td>7</td><td><strong>Provider config and direct-origin boundary</strong></td><td style="text-align:right">4</td></tr><tr><td>8</td><td><strong>Evidence standard</strong> — eight parts at 5 points each</td><td style="text-align:right">40</td></tr><tr><td>—</td><td><strong>Total</strong></td><td style="text-align:right"><strong>100</strong></td></tr></tbody></table></div>
+<p><strong>Deductions</strong></p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>Any usable credential in the submission</td><td>Zero for the affected artifact and resubmission with rotation evidence; no duplicate blanket deduction</td></tr><tr><td>Missing redaction attestation</td><td>−5</td></tr><tr><td>A negative test asserted but not evidenced</td><td>−4 each</td></tr><tr><td>Diagram or transcripts from the lab tenant where the task requires <strong>your</strong> provider</td><td>−5 each</td></tr></tbody></table></div>
+<hr>
+<h2 id="8-time-estimate">8. Time estimate</h2>
+<p>Individual work. These are <strong>your hours</strong>, not a split with anyone else.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>Task</th><th style="text-align:right">Hours</th></tr></thead><tbody><tr><td>1–3 — One provider walk and annotated claims</td><td style="text-align:right">2–3</td></tr><tr><td>4 — Reuse local negative transcripts; verify real positive configuration</td><td style="text-align:right">1–1.5</td></tr><tr><td>5–6 — Integrate existing server, roles/session checks, reuse stream experiment</td><td style="text-align:right">3–3.5</td></tr><tr><td>7–8 — Export, redact and index existing evidence</td><td style="text-align:right">2</td></tr><tr><td><strong>Total</strong></td><td style="text-align:right"><strong>8–10 hours</strong></td></tr></tbody></table></div>
+<p>This assumes the instructor has delivered functioning registrations and an
+integration baseline for your stack. Do not spend these hours reverse-engineering
+tenant administration. If blocked, submit the exact failed step and continue
+the diagnostic tasks; recover the real-provider gate with the instructor.</p>
+<p><strong>Task 6 is where students lose control</strong>, and Task 4 is second. Both depend on
+things outside your editor — a tenant that has to be configured, a token that has
+to actually expire. Start Task 6 the day it is assigned.</p>
+<blockquote>
+<p><strong>A shortcut that is not cheating.</strong> Tasks 4 and 6 need <em>deterministic</em> bad
+tokens: expired, wrong-issuer, wrong-audience, and one missing a scope. Your
+real tenant will not mint those on demand. Use the lab authorization server
+(<code>GET /mint?variant=…</code> on the running local issuer) as a <strong>fixture generator</strong> for those
+cases, point your validator at its issuer and JWKS for that test run, and say
+so in your write-up. The <em>positive</em> path and the audience-binding evidence must
+still come from your real tenant.</p>
+</blockquote>
+<blockquote>
+<p><strong>If your Week 7 system has no long-lived stream</strong> — no <code>subscriptions/listen</code>,
+no SSE, no WebSocket — Task 6.5 becomes: open any connection or session that
+outlives one token lifetime (a polling client holding a token, a queued job, a
+retry loop) and document what happens at <code>exp</code>. If you genuinely have nothing
+that outlives a token, say so with evidence and describe what you <em>would</em> do.
+Full marks are available for a well-argued &quot;not applicable here, and here is
+why&quot;.</p>
+</blockquote>
+<hr>
+<h2 id="9-what-good-looks-like-vs-what-loses-points">9. What good looks like vs. what loses points</h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>What good looks like</th><th>What loses points</th></tr></thead><tbody><tr><td>&quot;The token was rejected with 401 and <code>error_description=&quot;audience mismatch&quot;</code>; the <code>aud</code> was <code>api://campuspulse-grades</code> and our resource identifier is <code>api://campuspulse-mcp</code>.&quot;</td><td>&quot;Audience validation is enabled.&quot;</td></tr><tr><td>A HAR with <code>&lt;REDACTED:access_token 1043 chars&gt;</code> preserving the field</td><td>A HAR with a black rectangle over a screenshot</td></tr><tr><td>A policy table with an explicit <strong>deny-by-default</strong> row</td><td>Fourteen <code>if</code> statements pasted from the handler</td></tr><tr><td>&quot;Our stream survived its own token by 6 seconds; here is the capture and here is the fix.&quot;</td><td>&quot;Token expiry is handled.&quot;</td></tr><tr><td>&quot;The model produced <code>jwtVerify(token, key)</code> with no <code>algorithms</code> option; we rejected it and added an allow-list — here is the <code>alg: none</code> test that proves it now fails.&quot;</td><td>&quot;We used AI to write the validation code.&quot;</td></tr><tr><td>Annotations in your own words, explaining the reasoning behind each finding</td><td>A write-up that reads like generated boilerplate with no reasoning shown</td></tr></tbody></table></div>
+<hr>
+<h2 id="10-the-environment-bound-component">10. The environment-bound component</h2>
+<p><strong>Be precise about this, because a coding agent with a terminal really can run
+these tests for you.</strong> The claim is not &quot;a model cannot produce these bytes.&quot; The
+claim is narrower and harder:</p>
+<blockquote>
+<p>These artifacts are <strong>environment-bound evidence</strong>, not code-generation tasks.
+They are valid only if they are reproducible from your tagged commit, against
+your tenant, and defensible by you in conversation.</p>
+</blockquote>
+<p>Three things here have no correct answer that exists outside your own system:</p>
+<ol>
+<li><p><strong>The negative results.</strong> No model has seen your tenant, your audience string,
+or your clock. It can produce a <em>plausible</em> transcript — and a plausible
+transcript that does not match your tagged commit is <strong>fabricated evidence</strong>,
+which goes through the University integrity process rather than a grade appeal.
+The defence against that temptation is that it is trivially checkable: the
+grader re-runs your reproduction commands.</p>
+</li>
+<li><p><strong>The scope-to-tool policy table.</strong> This encodes which of <em>your</em> tools change
+state, which are destructive, and what your project means by &quot;operator&quot;. That
+is a design judgment recorded in your Week 7 work and your head. A model can
+guess a table; it cannot know that <code>draft_incident_update</code> is safe in your
+system because it never publishes, or that your <code>delete_incident</code> is soft.</p>
+</li>
+<li><p><strong>The expiry-on-a-long-lived-connection result.</strong> An empirical fact about the
+interaction between two things you built in two different weeks. The only way
+to know it is to run it and watch a number go negative.</p>
+</li>
+</ol>
+<p><strong>Yes, you may use an agent to run the tests.</strong> Log it in your AI-use log like
+anything else. What you may not do is submit output you did not produce, or
+cannot explain. The oral component of the final project is where that gets
+checked.</p>
+<hr>
+<h2 id="11-submission">11. Submission</h2>
+<ul>
+<li>Push to your repository on a branch named <code>hw7-claims-forensics</code>.</li>
+<li>Tag the commit you tested: <code>git tag hw7-submission &amp;&amp; git push --tags</code>.</li>
+<li>Submit in D2L: the repository URL, the <strong>tag name</strong>, and the <strong>commit SHA</strong>.</li>
+<li><code>evidence/README.md</code> is the front door. It must link every artifact and contain
+the redaction attestation.</li>
+</ul>
+<p><strong>Due before Week 9.</strong> Week 9&#39;s lab attacks this system; if it is not authorized,
+you will spend that lab building instead of attacking.</p>
+<hr>
+<h2 id="reference">Reference</h2>
+<ul>
+<li><a href="lab.html">Week 8 lab</a> · <a href="class-notes.html">lecture notes</a> · <a href="prep.html">prep</a></li>
+<li><a href="../../docs/evidence-standard.html">Evidence standard</a> · <a href="../../docs/ai-use-policy.html">AI-use policy</a></li>
+<li><a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization">MCP — Authorization, spec 2026-07-28</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc9728.html">RFC 9728 — Protected Resource Metadata</a> · <a href="https://www.rfc-editor.org/rfc/rfc8707.html">RFC 8707 — Resource Indicators</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc7636.html">RFC 7636 — PKCE</a> · <a href="https://www.rfc-editor.org/rfc/rfc9700.html">RFC 9700 — OAuth 2.0 Security BCP</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc6750.html">RFC 6750 — Bearer tokens and <code>WWW-Authenticate</code></a> · <a href="https://www.rfc-editor.org/rfc/rfc7519.html">RFC 7519 — JWT</a></li>
+</ul>
+
+</main>
+<footer>Individual coursework. D2L contains dated deadlines, submissions and private course access.</footer>
+</body>
+</html>

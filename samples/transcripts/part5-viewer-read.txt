@@ -1,0 +1,72 @@
+
+--------------------------------------------------------------------------
+[1] tools/call list_service_status with NO Authorization header
+    HTTP 401
+    WWW-Authenticate: Bearer resource_metadata="http://127.0.0.1:8930/.well-known/oauth-protected-resource", scope="campuspulse.read"
+    body: {"error":"unauthorized","error_description":"This MCP server requires an OAuth 2.1 access token. Start at the resource_metadata URL."}
+
+--------------------------------------------------------------------------
+[2] GET http://127.0.0.1:8930/.well-known/oauth-protected-resource   (RFC 9728)
+    {
+      "resource": "http://127.0.0.1:8930/mcp",
+      "authorization_servers": [
+        "http://127.0.0.1:9100"
+      ],
+      "scopes_supported": [
+        "campuspulse.read",
+        "campuspulse.incident.write"
+      ],
+      "bearer_methods_supported": [
+        "header"
+      ],
+      "resource_documentation": "https://campuspulse.example/docs/mcp"
+    }
+
+--------------------------------------------------------------------------
+[3] GET http://127.0.0.1:9100/.well-known/oauth-authorization-server
+    issuer                        http://127.0.0.1:9100   (matches the PRM entry)
+    authorization_endpoint        http://127.0.0.1:9100/authorize
+    token_endpoint                http://127.0.0.1:9100/token
+    jwks_uri                      http://127.0.0.1:9100/jwks.json
+    code_challenge_methods        S256
+    iss in auth response          true
+
+--------------------------------------------------------------------------
+[4] authorization request (PKCE + resource)
+    code_challenge_method=S256
+    code_challenge=uOMxXh789GJuyAnTS_9wZPczLs96LYOrolNbmrtuBfM
+    resource=http://127.0.0.1:8930/mcp
+    scope=openid campuspulse.read
+           ^ from the WWW-Authenticate challenge — least privilege
+    signed in as: viewer
+
+--------------------------------------------------------------------------
+[5] authorization response validation
+    state   OK   returned=YvPPPvxE3e8wxFwIrAVzRQ
+    iss     OK   returned=http://127.0.0.1:9100 expected=http://127.0.0.1:9100   (RFC 9207)
+    code    lab_70631036…  <- assume this leaked; PKCE is why that is survivable
+
+--------------------------------------------------------------------------
+[6] POST http://127.0.0.1:9100/token   ->  HTTP 200
+    token_type    Bearer
+    expires_in    900s
+    scope         openid campuspulse.read
+    id_token      present (for the CLIENT — never send it to the API)
+
+    access-token claims that decide the next request:
+      iss    http://127.0.0.1:9100
+      aud    http://127.0.0.1:8930/mcp      <- must be http://127.0.0.1:8930/mcp
+      sub    a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11
+      scope  openid campuspulse.read
+      roles  ["viewer"]
+      exp    1786829758  (2026-08-15T21:35:58.000Z)
+
+--------------------------------------------------------------------------
+[7] tools/call list_service_status WITH the access token
+    HTTP 200
+    body: {"result":{"content":[{"type":"text","text":"{\n  \"generatedAt\": \"2026-08-15T21:20:58.065Z\",\n  \"serviceCount\": 4,\n  \"worstStatus\": \"partial_outage\",\n  \"services\": [\n    {\n      \"slug\": \"meal-plan-balance\",\n      \"name\": \"Meal Plan Balance\",\n      \"category\": \"dining\",\
+
+==========================================================================
+RESULT  401 -> 200. The same call, the same server, one credential apart.
+==========================================================================
+

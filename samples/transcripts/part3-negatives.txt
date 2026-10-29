@@ -1,0 +1,298 @@
+
+===== expired =====
+
+token, redacted for submission
+  <header 110 chars>
+  .eyJpc3MiOiJodHRwOi8v…<500 chars>
+  .qoe_kJM3OOsB1E…<342 chars>
+
+decode  — this proves nothing. Anyone can do it. Including an attacker.
+  header  {"alg":"RS256","typ":"at+jwt","kid":"Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s"}
+  payload {
+            "iss": "http://127.0.0.1:9100",
+            "sub": "a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11",
+            "aud": "http://127.0.0.1:8930/mcp",
+            "client_id": "campuspulse-web",
+            "azp": "campuspulse-web",
+            "exp": 1786826456,
+            "iat": 1786825556,
+            "nbf": 1786825556,
+            "jti": "b30d8c4d-57f8-4373-a3a7-548ab3b3155e",
+            "typ": "Bearer",
+            "scope": "openid campuspulse.read",
+            "roles": [
+              "viewer"
+            ],
+            "amr": [
+              "pwd"
+            ],
+            "campuspulse/campus": "Riverbend"
+          }
+
+validate  against http://127.0.0.1:9100/jwks.json
+  PASS  alg is on the allow-list           header.alg=RS256; allowed=RS256
+  PASS  kid resolves in JWKS               kid=Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s
+  PASS  signature verifies                 RS256 over header.payload
+  PASS  iss matches configured issuer      token iss=http://127.0.0.1:9100  expected=http://127.0.0.1:9100
+  PASS  aud contains this resource server  token aud="http://127.0.0.1:8930/mcp"  expected to contain=http://127.0.0.1:8930/mcp
+  FAIL  exp is in the future               exp=1786826456 (2026-08-15T20:40:56.000Z), now=1786828856, delta=-2400s, skew=60s
+  PASS  nbf/iat are not in the future      nbf=1786825556 iat=1786825556 now=1786828856 skew=60s
+  PASS  scope includes campuspulse.read    granted=[openid campuspulse.read]
+
+REJECT 401  the token is not usable: exp is in the future
+            WWW-Authenticate: Bearer error="invalid_token", error_description="token expired"
+
+===== wrong-issuer =====
+
+token, redacted for submission
+  <header 110 chars>
+  .eyJpc3MiOiJodHRwczov…<542 chars>
+  .cS9dv0XPT2oK4o…<342 chars>
+
+decode  — this proves nothing. Anyone can do it. Including an attacker.
+  header  {"alg":"RS256","typ":"at+jwt","kid":"Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s"}
+  payload {
+            "iss": "https://login.evil-campus.example/realms/campuspulse",
+            "sub": "a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11",
+            "aud": "http://127.0.0.1:8930/mcp",
+            "client_id": "campuspulse-web",
+            "azp": "campuspulse-web",
+            "exp": 1786829756,
+            "iat": 1786828856,
+            "nbf": 1786828856,
+            "jti": "e7820f42-b61f-41ee-b749-39056e71a37d",
+            "typ": "Bearer",
+            "scope": "openid campuspulse.read",
+            "roles": [
+              "viewer"
+            ],
+            "amr": [
+              "pwd"
+            ],
+            "campuspulse/campus": "Riverbend"
+          }
+
+validate  against http://127.0.0.1:9100/jwks.json
+  PASS  alg is on the allow-list           header.alg=RS256; allowed=RS256
+  PASS  kid resolves in JWKS               kid=Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s
+  PASS  signature verifies                 RS256 over header.payload
+  FAIL  iss matches configured issuer      token iss=https://login.evil-campus.example/realms/campuspulse  expected=http://127.0.0.1:9100
+  PASS  aud contains this resource server  token aud="http://127.0.0.1:8930/mcp"  expected to contain=http://127.0.0.1:8930/mcp
+  PASS  exp is in the future               exp=1786829756 (2026-08-15T21:35:56.000Z), now=1786828856, delta=900s, skew=60s
+  PASS  nbf/iat are not in the future      nbf=1786828856 iat=1786828856 now=1786828856 skew=60s
+  PASS  scope includes campuspulse.read    granted=[openid campuspulse.read]
+
+REJECT 401  the token is not usable: iss matches configured issuer
+            WWW-Authenticate: Bearer error="invalid_token", error_description="issuer mismatch"
+
+===== wrong-audience =====
+
+token, redacted for submission
+  <header 110 chars>
+  .eyJpc3MiOiJodHRwOi8v…<518 chars>
+  .zVyzAKmEVEC02a…<342 chars>
+
+decode  — this proves nothing. Anyone can do it. Including an attacker.
+  header  {"alg":"RS256","typ":"at+jwt","kid":"Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s"}
+  payload {
+            "iss": "http://127.0.0.1:9100",
+            "sub": "a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11",
+            "aud": "https://grades.campuspulse.example/api",
+            "client_id": "campuspulse-web",
+            "azp": "campuspulse-web",
+            "exp": 1786829757,
+            "iat": 1786828857,
+            "nbf": 1786828857,
+            "jti": "5d1f9d37-500e-4912-827a-d97c0c62b589",
+            "typ": "Bearer",
+            "scope": "openid campuspulse.read",
+            "roles": [
+              "viewer"
+            ],
+            "amr": [
+              "pwd"
+            ],
+            "campuspulse/campus": "Riverbend"
+          }
+
+validate  against http://127.0.0.1:9100/jwks.json
+  PASS  alg is on the allow-list           header.alg=RS256; allowed=RS256
+  PASS  kid resolves in JWKS               kid=Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s
+  PASS  signature verifies                 RS256 over header.payload
+  PASS  iss matches configured issuer      token iss=http://127.0.0.1:9100  expected=http://127.0.0.1:9100
+  FAIL  aud contains this resource server  token aud="https://grades.campuspulse.example/api"  expected to contain=http://127.0.0.1:8930/mcp
+  PASS  exp is in the future               exp=1786829757 (2026-08-15T21:35:57.000Z), now=1786828857, delta=900s, skew=60s
+  PASS  nbf/iat are not in the future      nbf=1786828857 iat=1786828857 now=1786828857 skew=60s
+  PASS  scope includes campuspulse.read    granted=[openid campuspulse.read]
+
+REJECT 401  the token is not usable: aud contains this resource server
+            WWW-Authenticate: Bearer error="invalid_token", error_description="audience mismatch: this token was not issued for this resource"
+
+===== no-scope =====
+
+token, redacted for submission
+  <header 110 chars>
+  .eyJpc3MiOiJodHRwOi8v…<496 chars>
+  .suPUUn7CdRXNLu…<342 chars>
+
+decode  — this proves nothing. Anyone can do it. Including an attacker.
+  header  {"alg":"RS256","typ":"at+jwt","kid":"Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s"}
+  payload {
+            "iss": "http://127.0.0.1:9100",
+            "sub": "a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11",
+            "aud": "http://127.0.0.1:8930/mcp",
+            "client_id": "campuspulse-web",
+            "azp": "campuspulse-web",
+            "exp": 1786829757,
+            "iat": 1786828857,
+            "nbf": 1786828857,
+            "jti": "39b04b2e-aaf1-4a1a-aba0-d573da1fe347",
+            "typ": "Bearer",
+            "scope": "openid profile email",
+            "roles": [
+              "viewer"
+            ],
+            "amr": [
+              "pwd"
+            ],
+            "campuspulse/campus": "Riverbend"
+          }
+
+validate  against http://127.0.0.1:9100/jwks.json
+  PASS  alg is on the allow-list           header.alg=RS256; allowed=RS256
+  PASS  kid resolves in JWKS               kid=Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s
+  PASS  signature verifies                 RS256 over header.payload
+  PASS  iss matches configured issuer      token iss=http://127.0.0.1:9100  expected=http://127.0.0.1:9100
+  PASS  aud contains this resource server  token aud="http://127.0.0.1:8930/mcp"  expected to contain=http://127.0.0.1:8930/mcp
+  PASS  exp is in the future               exp=1786829757 (2026-08-15T21:35:57.000Z), now=1786828857, delta=900s, skew=60s
+  PASS  nbf/iat are not in the future      nbf=1786828857 iat=1786828857 now=1786828857 skew=60s
+  FAIL  scope includes campuspulse.read    granted=[openid profile email]
+
+REJECT 403  the token is genuine and yours, but this subject may not do this
+            WWW-Authenticate: Bearer error="insufficient_scope", scope="campuspulse.read"
+
+===== id-token =====
+
+token, redacted for submission
+  <header 106 chars>
+  .eyJpc3MiOiJodHRwOi8v…<375 chars>
+  .j0h4OZSbyX_bdF…<342 chars>
+
+decode  — this proves nothing. Anyone can do it. Including an attacker.
+  header  {"alg":"RS256","typ":"JWT","kid":"Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s"}
+  payload {
+            "iss": "http://127.0.0.1:9100",
+            "sub": "a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11",
+            "aud": "campuspulse-web",
+            "exp": 1786829757,
+            "iat": 1786828857,
+            "auth_time": 1786828815,
+            "amr": [
+              "pwd"
+            ],
+            "name": "Dana Okonkwo",
+            "email": "dana.okonkwo@campuspulse.example",
+            "email_verified": true,
+            "nonce": "n-0S6_WzA2Mj"
+          }
+
+validate  against http://127.0.0.1:9100/jwks.json
+  PASS  alg is on the allow-list           header.alg=RS256; allowed=RS256
+  PASS  kid resolves in JWKS               kid=Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s
+  PASS  signature verifies                 RS256 over header.payload
+  PASS  iss matches configured issuer      token iss=http://127.0.0.1:9100  expected=http://127.0.0.1:9100
+  FAIL  aud contains this resource server  token aud="campuspulse-web"  expected to contain=http://127.0.0.1:8930/mcp
+        ^ this looks like an ID TOKEN. Its audience is the client, not the API.
+  PASS  exp is in the future               exp=1786829757 (2026-08-15T21:35:57.000Z), now=1786828857, delta=900s, skew=60s
+  PASS  nbf/iat are not in the future      nbf=- iat=1786828857 now=1786828857 skew=60s
+  FAIL  scope includes campuspulse.read    granted=[]
+
+REJECT 401  the token is not usable: aud contains this resource server
+            WWW-Authenticate: Bearer error="invalid_token", error_description="audience mismatch: this token was not issued for this resource"
+
+===== stale-kid =====
+
+token, redacted for submission
+  <header 74 chars>
+  .eyJpc3MiOiJodHRwOi8v…<500 chars>
+  .Dj4Z_YnVuAh0Zm…<342 chars>
+
+decode  — this proves nothing. Anyone can do it. Including an attacker.
+  header  {"alg":"RS256","typ":"at+jwt","kid":"retired-2025-key"}
+  payload {
+            "iss": "http://127.0.0.1:9100",
+            "sub": "a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11",
+            "aud": "http://127.0.0.1:8930/mcp",
+            "client_id": "campuspulse-web",
+            "azp": "campuspulse-web",
+            "exp": 1786829757,
+            "iat": 1786828857,
+            "nbf": 1786828857,
+            "jti": "4b9c2e2d-ee90-4755-895f-6e3c3bc36222",
+            "typ": "Bearer",
+            "scope": "openid campuspulse.read",
+            "roles": [
+              "viewer"
+            ],
+            "amr": [
+              "pwd"
+            ],
+            "campuspulse/campus": "Riverbend"
+          }
+
+validate  against http://127.0.0.1:9100/jwks.json
+  PASS  alg is on the allow-list           header.alg=RS256; allowed=RS256
+  FAIL  kid resolves in JWKS               kid=retired-2025-key not among [Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s]
+  FAIL  signature verifies                 cryptographic verification failed
+  PASS  iss matches configured issuer      token iss=http://127.0.0.1:9100  expected=http://127.0.0.1:9100
+  PASS  aud contains this resource server  token aud="http://127.0.0.1:8930/mcp"  expected to contain=http://127.0.0.1:8930/mcp
+  PASS  exp is in the future               exp=1786829757 (2026-08-15T21:35:57.000Z), now=1786828857, delta=900s, skew=60s
+  PASS  nbf/iat are not in the future      nbf=1786828857 iat=1786828857 now=1786828857 skew=60s
+  PASS  scope includes campuspulse.read    granted=[openid campuspulse.read]
+
+REJECT 401  the token is not usable: kid resolves in JWKS; signature verifies
+            WWW-Authenticate: Bearer error="invalid_token", error_description="unknown signing key"
+
+===== not-yet-valid =====
+
+token, redacted for submission
+  <header 110 chars>
+  .eyJpc3MiOiJodHRwOi8v…<500 chars>
+  .rCL2-dbalNNDXT…<342 chars>
+
+decode  — this proves nothing. Anyone can do it. Including an attacker.
+  header  {"alg":"RS256","typ":"at+jwt","kid":"Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s"}
+  payload {
+            "iss": "http://127.0.0.1:9100",
+            "sub": "a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11",
+            "aud": "http://127.0.0.1:8930/mcp",
+            "client_id": "campuspulse-web",
+            "azp": "campuspulse-web",
+            "exp": 1786829757,
+            "iat": 1786828857,
+            "nbf": 1786829457,
+            "jti": "7b854534-23d1-4a9e-9246-d3f0eb24e96b",
+            "typ": "Bearer",
+            "scope": "openid campuspulse.read",
+            "roles": [
+              "viewer"
+            ],
+            "amr": [
+              "pwd"
+            ],
+            "campuspulse/campus": "Riverbend"
+          }
+
+validate  against http://127.0.0.1:9100/jwks.json
+  PASS  alg is on the allow-list           header.alg=RS256; allowed=RS256
+  PASS  kid resolves in JWKS               kid=Oj3qB0auBBe_8w4VxP2entcOvTCvLkXNpd0Y8oNdN8s
+  PASS  signature verifies                 RS256 over header.payload
+  PASS  iss matches configured issuer      token iss=http://127.0.0.1:9100  expected=http://127.0.0.1:9100
+  PASS  aud contains this resource server  token aud="http://127.0.0.1:8930/mcp"  expected to contain=http://127.0.0.1:8930/mcp
+  PASS  exp is in the future               exp=1786829757 (2026-08-15T21:35:57.000Z), now=1786828857, delta=900s, skew=60s
+  FAIL  nbf/iat are not in the future      nbf=1786829457 iat=1786828857 now=1786828857 skew=60s
+  PASS  scope includes campuspulse.read    granted=[openid campuspulse.read]
+
+REJECT 401  the token is not usable: nbf/iat are not in the future
+            WWW-Authenticate: Bearer error="invalid_token", error_description="token not yet valid"
+

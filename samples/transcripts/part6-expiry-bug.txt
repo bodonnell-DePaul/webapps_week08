@@ -1,0 +1,21 @@
+
+token minted with a 6-second lifetime
+  exp 1786825483  (2026-08-15T20:24:43.000Z)
+  scope openid campuspulse.read
+
+opening a subscriptions/listen stream. Watching for 14s.
+
+t+  0s  stream opened: HTTP 200 text/event-stream
+t+  0s  open           {"sub":"a4f1c0de-7c1b-4a2e-9f10-3d5c0b8e2a11","exp":1786825483,"expires_in":6,"enforcing":false}
+t+  2s  heartbeat      {"n":1,"token_expires_in":4,"still_streaming":true}
+t+  4s  heartbeat      {"n":2,"token_expires_in":2,"still_streaming":true}
+t+  6s  heartbeat      {"n":3,"token_expires_in":0,"still_streaming":true}
+t+  8s  heartbeat      {"n":4,"token_expires_in":-2,"still_streaming":true}
+t+ 10s  heartbeat      {"n":5,"token_expires_in":-4,"still_streaming":true}
+t+ 12s  heartbeat      {"n":6,"token_expires_in":-6,"still_streaming":true}
+
+t+ 14s  watch window over — the stream is STILL OPEN.
+       Authorization was decided once, at t+0, and never revisited.
+       This is the failure mode. Restart the proxy with
+       ENFORCE_STREAM_EXPIRY=1 and run this again.
+

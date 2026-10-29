@@ -1,0 +1,26 @@
+{
+  "week": "week08",
+  "checkpoints": [
+    {
+      "id": "w08-cp1",
+      "block": "A",
+      "minutes": 10,
+      "mode": "individual",
+      "prompt": "Your MCP server is at https://mcp.<yourname>.example/mcp. (1) Who is the resource owner, the client, the authorization server, and the resource server? (2) Which of them may hold a client secret, and why can the others not? (3) An attacker reads your browser history and finds ?code=…. What else do they need, and where does it live?"
+    },
+    {
+      "id": "w08-cp2",
+      "block": "B",
+      "minutes": 10,
+      "mode": "individual",
+      "prompt": "Four tokens arrive at your MCP server. For each, give the HTTP status and name the check that decided. (1) Signature valid, iss correct, aud = your web API, exp in 12 min. (2) Signature valid, aud correct, scope = 'openid profile', no campuspulse.* scope. (3) alg: none, payload says roles:[operator], no signature segment. (4) Signature valid, everything correct, exp was 90 seconds ago, configured skew is 60s."
+    },
+    {
+      "id": "w08-cp3",
+      "block": "C",
+      "minutes": 10,
+      "mode": "individual",
+      "prompt": "Write the scope-to-tool policy table for YOUR OWN MCP server, including a row for the default. Your tools are list_service_status (read), get_incident (read), post_incident_update (writes), and delete_incident (destructive, shipping tomorrow). (1) Which scopes exist and which tool needs which? (2) delete_incident ships tomorrow and nobody updates the table — what happens, and what should happen?"
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Week 8 — Pre-Class Prep (~55 min) - CSC 436</title>
+<link rel="stylesheet" href="../../assets/course.css">
+<link rel="icon" type="image/svg+xml" href="../../assets/course-icon.svg">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header><a class="course-name" href="../../index.html">CSC 436</a>
+<nav aria-label="Course">
+<a href="../../docs/getting-started.html">Start here</a>
+<a href="../../docs/new_syllabus.html">Syllabus</a>
+<a href="../../docs/course-map.html">Course map</a>
+<a href="../../final-project/index.html">Final project</a>
+</nav></header>
+<main id="main">
+<p class="source-link"><a href="prep.md" download>Download Markdown source</a></p>
+<h1 id="week-8--pre-class-prep-55-min">Week 8 — Pre-Class Prep (~55 min)</h1>
+<p><strong>CSC 436 · Identity: OAuth, OIDC, Claims — and Authorizing the MCP Server</strong></p>
+<blockquote>
+<p><strong>Due before class.</strong> The opening includes short retrieval, a focused
+readiness-check debrief, and weekly logistics. Block A&#39;s teaching assumes
+you have already inspected a discovery document yourself.</p>
+</blockquote>
+<hr>
+<h2 id="why-this-prep-exists">Why this prep exists</h2>
+<p>You are about to put OAuth in front of the MCP server you built last week. Almost
+all of the hard part is vocabulary and shape: four actors, three token types,
+about a dozen claims, and one flow. Reading it cold in a lecture is a waste of
+lecture. <strong>Read it here so class can be spent on the parts that break.</strong></p>
+<p>The one hands-on item (item 3) takes five minutes and makes the whole of Block A
+concrete. Do not skip it.</p>
+<hr>
+<h2 id="core-set-55-min--all-required">Core set (~55 min) — all required</h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th>#</th><th>Title</th><th>Publisher</th><th>Type</th><th style="text-align:right">Time</th></tr></thead><tbody><tr><td>1</td><td><a href="https://aaronparecki.com/oauth-2-simplified/">OAuth 2.0 Simplified</a> — roles and code flow only</td><td>Aaron Parecki</td><td>Article</td><td style="text-align:right">15 min</td></tr><tr><td>2</td><td><a href="https://openid.net/specs/openid-connect-core-1_0.html">OpenID Connect Core 1.0</a> — <strong>§1–3 only</strong></td><td>OpenID Foundation</td><td>Spec</td><td style="text-align:right">15 min</td></tr><tr><td>3</td><td><a href="https://openid.net/specs/openid-connect-discovery-1_0.html">OIDC Discovery 1.0</a> — <strong>§4</strong>, plus the hands-on below</td><td>OpenID Foundation</td><td>Spec</td><td style="text-align:right">5 min</td></tr><tr><td>4</td><td><a href="https://jwt.io/">jwt.io</a> — decode a token</td><td>Auth0</td><td>Interactive</td><td style="text-align:right">5 min</td></tr><tr><td>5</td><td><a href="https://www.rfc-editor.org/rfc/rfc7636.html">RFC 7636 — PKCE</a> — <strong>§1, §4.1–4.6</strong></td><td>IETF</td><td>RFC</td><td style="text-align:right">5 min</td></tr><tr><td>6</td><td><a href="https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/authorization.md">Understanding Authorization in MCP</a></td><td>Model Context Protocol</td><td>Tutorial</td><td style="text-align:right">10 min</td></tr></tbody></table></div>
+<p><strong>Total: ~55 minutes</strong>, of which item 2 is a skim. If you are short on time, read
+items 1, 3, and 6 fully and skim 2.</p>
+<h3 id="what-to-look-for-in-each">What to look for in each</h3>
+<p><strong>1 — OAuth 2.0 Simplified.</strong> Read for the <em>roles</em> and the <em>authorization code
+flow</em>. Skip the sections on client credentials and device flow; we do not use
+them. When you finish, you should be able to say what a &quot;public client&quot; is and
+why it cannot hold a secret.</p>
+<p><strong>2 — OIDC Core §1–3.</strong> §1 is terminology, §2 is the ID token, §3.1 is the
+authorization-code flow with OIDC on top. <strong>§2 is the important one.</strong> Note which
+claims are REQUIRED in an ID token.</p>
+<p><strong>3 — OIDC Discovery §4, and the five-minute exercise.</strong> §4 defines the
+<code>/.well-known/openid-configuration</code> document. Then do this:</p>
+<pre><code class="language-bash">curl -s https://accounts.google.com/.well-known/openid-configuration
+</code></pre>
+<p>Find and write down these four values — you will be asked for them in class:</p>
+<ul>
+<li><code>authorization_endpoint</code></li>
+<li><code>jwks_uri</code></li>
+<li><code>scopes_supported</code></li>
+<li><code>code_challenge_methods_supported</code></li>
+</ul>
+<p>Then fetch the JWKS that <code>jwks_uri</code> points at and <strong>count the keys</strong>:</p>
+<pre><code class="language-bash">curl -s https://www.googleapis.com/oauth2/v3/certs
+</code></pre>
+<p>Two things should surprise you. Bring both to class.</p>
+<p><strong>4 — jwt.io.</strong> Use only the debugger&#39;s built-in public example. Never paste
+your own tenant token, local lab token, secret or cookie into an online decoder.
+Look at the three
+segments. <strong>Then answer, honestly, for yourself:</strong> did the page tell you the token
+was <em>valid</em>, or only what it <em>contained</em>? That distinction is the title of Block B.</p>
+<p><strong>5 — RFC 7636 §4.1–4.6.</strong> Six short sections. They define <code>code_verifier</code>,
+<code>code_challenge</code>, <code>S256</code>, and the check the authorization server performs. It is
+about two pages and it is the whole mechanism.</p>
+<p><strong>6 — Understanding Authorization in MCP.</strong> Read the &quot;Authorization Flow: Step by
+Step&quot; section carefully. You do not need to follow the Keycloak walkthrough — the
+course tenant is already provisioned for you. Note where <code>401</code> appears, and what
+the client is expected to do with it.</p>
+<hr>
+<h2 id="optional-enrichment-not-assigned-not-on-the-readiness-check">Optional enrichment (not assigned, not on the readiness check)</h2>
+<ul>
+<li><a href="https://www.rfc-editor.org/rfc/rfc9700.html">RFC 9700 — OAuth 2.0 Security Best Current Practice</a> — the current, consolidated guidance. §2 is the short version.</li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc9728.html">RFC 9728 — OAuth 2.0 Protected Resource Metadata</a> — what your MCP server must publish. Four pages.</li>
+<li><a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization">MCP — Authorization, specification 2026-07-28</a> — the normative version of item 6.</li>
+<li><a href="https://cheatsheetseries.owasp.org/cheatsheets/OAuth2_Cheat_Sheet.html">OWASP — OAuth 2.0 Cheat Sheet</a></li>
+</ul>
+<hr>
+<h2 id="come-to-class-with">Come to class with</h2>
+<ul>
+<li><input disabled="" type="checkbox"> The four discovery values and the JWKS key count from item 3, written down.</li>
+<li><input disabled="" type="checkbox"> The two things that surprised you.</li>
+<li><input disabled="" type="checkbox"> Your <strong>Week 7 MCP server running</strong>, or a note about why it isn&#39;t. The lab puts OAuth in front of it.</li>
+<li><input disabled="" type="checkbox"> Your client ID for the course tenant (<a href="index.html"><code>README.md</code></a>).</li>
+</ul>
+<hr>
+<h2 id="readiness-check--5-questions">Readiness check — 5 questions</h2>
+<p>Due before class in D2L. Auto-graded. The answer key is retained in the
+instructor edition for feedback and debrief.</p>
+<p><strong>Q1.</strong> OAuth 2.0 was designed primarily to solve which problem?</p>
+<ul>
+<li>A. Proving who a user is to a website</li>
+<li>B. Letting one application act on a user&#39;s behalf at another, without the user&#39;s password</li>
+<li>C. Encrypting data in transit between a browser and a server</li>
+<li>D. Replacing session cookies with tokens</li>
+</ul>
+<p><strong>Q2.</strong> A client generates <code>code_verifier</code>, computes <code>code_challenge = BASE64URL(SHA256(code_verifier))</code>, and starts an authorization code flow. An attacker steals the authorization code from the browser&#39;s history. What does the attacker still need in order to obtain an access token?</p>
+<ul>
+<li>A. The <code>state</code> parameter</li>
+<li>B. The <code>code_challenge</code></li>
+<li>C. The <code>code_verifier</code></li>
+<li>D. The client secret</li>
+</ul>
+<p><strong>Q3.</strong> Your resource server receives a JWT access token. Its signature verifies against the issuer&#39;s JWKS, <code>iss</code> matches your configured issuer, and <code>exp</code> is 12 minutes in the future. Its <code>aud</code> claim names a <strong>different</strong> API in the same tenant. What should your server do?</p>
+<ul>
+<li>A. Accept it — the token is genuine and unexpired</li>
+<li>B. Accept it but log a warning</li>
+<li>C. Reject it with 403 Forbidden</li>
+<li>D. Reject it with 401 Unauthorized</li>
+</ul>
+<p><strong>Q4.</strong> What does pasting a JWT into jwt.io prove about that token?</p>
+<ul>
+<li>A. That its signature is valid</li>
+<li>B. That it has not expired</li>
+<li>C. That it was issued by the issuer named in <code>iss</code></li>
+<li>D. Only what it contains — nothing about whether any of it is true</li>
+</ul>
+<p><strong>Q5.</strong> In the MCP authorization flow, an MCP client makes its first request to a protected MCP server with no access token. What must the server return, and what does the client do next?</p>
+<ul>
+<li>A. 403, and the client gives up</li>
+<li>B. 401 with a <code>WWW-Authenticate</code> header naming a <code>resource_metadata</code> URL; the client fetches that document to discover the authorization server</li>
+<li>C. 302 redirecting the client to the authorization server</li>
+<li>D. 200 with an empty result, since authorization in MCP is optional</li>
+</ul>
+<hr>
+<hr>
+
+</main>
+<footer>Individual coursework. D2L contains dated deadlines, submissions and private course access.</footer>
+</body>
+</html>
